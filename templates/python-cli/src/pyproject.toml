@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "greetly"
+version = "0.1.0"
+description = "A tiny greeting CLI"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+greetly = "greetly.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

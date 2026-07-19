@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Environments
+.venv/
+venv/
+.env
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# Claude Code local state
+.claude/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Personal
+docs/
