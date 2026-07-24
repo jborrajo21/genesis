@@ -11,6 +11,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
+anthropic = ["anthropic"]
 
 [tool.ruff]
 line-length = 100

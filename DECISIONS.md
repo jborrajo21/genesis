@@ -173,3 +173,36 @@ demanded it (see the D-005 area) — it is now added against a real collection f
 not speculatively.
 - **Scope:** template-constant
 - **Eval hook:** bare `pytest` from repo root collects only `tests/` and passes with only `genesis` installed; the template's tests are never collected by the root run
+## D-016: First real provider — Anthropic
+
+- **Options:** Anthropic first · OpenAI first · defer
+- **Choice:** Anthropic
+- **Reason:** the owner holds an Anthropic API key with credit in hand; the adapter
+interface is the deliverable and either provider proves it equally, so the choice is
+driven purely by which key is available now. Cost of live testing is bounded by using
+the cheapest model tier, low `max_tokens`, and tiny prompts on manual runs only — the
+automated suite never calls the API (it runs against `FakeAdapter`), so credit is not
+spent by CI or by `pytest`.
+- **Scope:** render-variable (adapter identity; a second provider is an October extension)
+- **Eval hook:** with `ANTHROPIC_API_KEY` set, a manual smoke call returns a real `Completion`; with the key absent, that test skips and the suite still passes
+## D-017: Provider SDK lives in an optional extra, not core dependencies
+
+- **Options:** `anthropic` in `dependencies` · in `[project.optional-dependencies]` · raw HTTP with no SDK
+- **Choice:** official `anthropic` SDK, declared in `[project.optional-dependencies]` (e.g. `anthropic = ["anthropic"]`); installed via `pip install "genesis[anthropic]"`
+- **Reason:** putting the SDK in core `dependencies` would break the D-012 invariant
+that Genesis core imports with no provider SDK present — the whole point of the adapter
+seam. An optional extra keeps `pip install genesis` SDK-free while `genesis[anthropic]`
+opts in. Official SDK over raw HTTP because it handles auth, retries, response parsing,
+and API versioning, keeping the adapter a thin mapping rather than hand-rolled request
+code — right trade for a piece meant to last. Consequence: the adapter module imports
+`anthropic` at module load, so it must NOT be imported by `genesis` core or anything on
+the core import path; only code that has opted into the extra may import it.
+- **Scope:** template-constant
+- **Eval hook:** `pip install genesis` (no extra) still imports `genesis.adapter` with no `anthropic` present; `pip install "genesis[anthropic]"` makes `import anthropic` succeed; `genesis.adapter`/core never imports the provider adapter module
+## D-018: Live provider smoke test skips without a key
+
+- **Options:** run the live API call in CI · skip the smoke test when no key is present · no live test at all
+- **Choice:** a single smoke test decorated with `@pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), ...)`; CI never sets the key
+- **Reason:** the eval surface must stay deterministic and secret-free — CI must not depend on provider uptime, cost credit, or a stored secret. The `FakeAdapter` unit tests already give full offline coverage of the interface; the live smoke test only proves the real provider wiring, so it runs when a developer explicitly exports a key and skips otherwise. Gating on the `ANTHROPIC_API_KEY` env var (not an OAuth profile or a credit check) is a deliberately simple, explicit "I have API access" signal. This is the concrete form of the plan's honest-limitations principle: Genesis builds and passes CI with no provider access.
+- **Scope:** template-constant
+- **Eval hook:** bare `pytest` with no `ANTHROPIC_API_KEY` reports the smoke test as skipped and the suite stays green; with a funded key exported, the smoke test runs and returns a real `Completion`
