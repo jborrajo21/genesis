@@ -110,3 +110,26 @@ in-process test runner (CLI tests go through `subprocess` instead, which exercis
 the real entry point anyway).
 - **Scope:** template-constant
 - **Eval hook:** `dependencies = []` still holds in the generated pyproject; `<tool> --help` exits 0 using only stdlib imports
+## D-011: Genesis package layout
+
+- **Options:** flat layout vs `src/` layout · hatchling vs setuptools
+- **Choice:** `src/genesis/`, hatchling build backend, `requires-python = ">=3.11"`
+- **Reason:** reuses the template's proven layout (D-002, D-007) so root CI covers
+Genesis and the template the same way, and `src/` prevents the accidental
+working-directory import that a flat layout allows — the failure mode the template's
+tests exist to catch. Genesis-the-app has no reason to diverge from template-the-artefact
+on packaging; one mental model for both.
+- **Scope:** template-constant
+- **Eval hook:** `pip install -e .` at repo root builds `genesis` in a fresh venv; `import genesis` succeeds; root CI runs Genesis's checks alongside the template's via `working-directory`
+## D-012: Adapter interface via typing.Protocol
+
+- **Options:** `typing.Protocol` (structural) · `abc.ABC` + `@abstractmethod` (nominal)
+- **Choice:** `typing.Protocol`
+- **Reason:** structural typing lets a provider adapter satisfy the interface without
+importing or inheriting from Genesis core — any class with a matching `complete(...)`
+conforms. This is exactly the Task 1 success criterion: the consumer never knows or
+imports which provider answered. Cost accepted: conformance is checked statically
+(type checker / editor), not enforced at runtime — a missing method surfaces at
+type-check time, not as a loud instantiation error, unless `@runtime_checkable` is added.
+- **Scope:** template-constant
+- **Eval hook:** the interface module imports with no provider SDK present; `FakeAdapter` satisfies the Protocol without importing the Protocol class; a type check flags a non-conforming adapter
