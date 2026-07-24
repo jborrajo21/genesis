@@ -133,3 +133,43 @@ imports which provider answered. Cost accepted: conformance is checked staticall
 type-check time, not as a loud instantiation error, unless `@runtime_checkable` is added.
 - **Scope:** template-constant
 - **Eval hook:** the interface module imports with no provider SDK present; `FakeAdapter` satisfies the Protocol without importing the Protocol class; a type check flags a non-conforming adapter
+## D-013: Message and response shape
+
+- **Options:** raw strings (`complete(str) -> str`) · list of role dicts · typed dataclasses
+- **Choice:** typed `Message(role, content)` and `Completion(text, usage=None)` dataclasses
+- **Reason:** the Block 3 agent loop needs multi-turn conversations and cost caps;
+cost caps require token counts, so the response must carry metadata beyond text —
+which rules out raw strings. A typed boundary keeps provider-shaped dicts from leaking
+through the codebase: `Message`/`Completion` are Genesis's own types, so swapping
+providers never changes the signature the agent sees. dataclasses give a generated
+constructor, `__repr__`, and `__eq__` (the last makes them trivial to assert on) for
+zero dependencies. `usage` is `int | None = None` — optional token count, defaulted.
+- **Scope:** template-constant
+- **Eval hook:** `Completion(text="x").usage is None`; `Completion(text="x") == Completion(text="x")` (dataclass equality); adapter signature is `complete(list[Message]) -> Completion` with no provider type in it
+## D-014: FakeAdapter placement
+
+- **Options:** in-package (`src/genesis/fakes.py`) · test-only (`tests/conftest.py`)
+- **Choice:** in-package, `src/genesis/fakes.py`
+- **Reason:** a deterministic, zero-network adapter is reusable infrastructure, not a
+test artefact — the Block 6 eval harness and the agent loop's own tests will want it
+too, so it earns a place in the package rather than being trapped in `tests/`. It
+imports the data types (`Message`, `Completion`) it constructs, but NOT the
+`ModelAdapter` Protocol — conformance is structural (D-012).
+- **Scope:** template-constant
+- **Eval hook:** `from genesis.fakes import FakeAdapter` works from the installed package; `fakes.py` does not import `ModelAdapter`; `FakeAdapter(reply="x").complete([]).text == "x"`
+## D-015: Scope root pytest collection to tests/
+
+- **Options:** `testpaths = ["tests"]` in root pyproject · install `greetly` into the Genesis env · `--ignore`/`norecursedirs` blocklist
+- **Choice:** `[tool.pytest.ini_options] testpaths = ["tests"]` in the root `pyproject.toml`
+- **Reason:** the repo holds two independent packages (`genesis` at root, `greetly`
+under `templates/`); bare `pytest` from root discovers both test trees, but the Genesis
+env only installs `genesis`, so the template's imports fail during collection. Each
+package must test itself in its own environment — the template's tests run under its
+own CI job via `working-directory` (D-001). Allowlist (`testpaths`) over blocklist
+(`--ignore`): state what to include, not what to avoid. Installing `greetly` into the
+Genesis env is rejected — the template is a generated artefact, not a Genesis dependency.
+NOTE: this is the config Phase 0 deliberately deferred until an observed constraint
+demanded it (see the D-005 area) — it is now added against a real collection failure,
+not speculatively.
+- **Scope:** template-constant
+- **Eval hook:** bare `pytest` from repo root collects only `tests/` and passes with only `genesis` installed; the template's tests are never collected by the root run
