@@ -1,5 +1,6 @@
 import argparse
 from importlib.metadata import version
+
 from greetly.core import greet
 
 

@@ -1,5 +1,7 @@
 import os
+
 import pytest
+
 from genesis.adapter import Message
 from genesis.anthropic_adapter import AnthropicAdapter
 

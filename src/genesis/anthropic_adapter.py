@@ -1,5 +1,6 @@
 import anthropic
-from genesis.adapter import Message, Completion
+
+from genesis.adapter import Completion, Message
 
 
 class AnthropicAdapter:
