@@ -37,3 +37,21 @@ add_tool = Tool(
     ),
     func=_add,
 )
+
+
+def _multiply(a: int, b: int) -> str:
+    return str(a * b)
+
+
+multiply_tool = Tool(
+    definition=ToolDef(
+        name="multiply",
+        description="Multiply two iontegers and return the product",
+        input_schema={
+            "type": "object",
+            "properties": {"a": {"type": "integer"}, "b": {"type": "integer"}},
+            "required": ["a", "b"],
+        },
+    ),
+    func=_multiply,
+)

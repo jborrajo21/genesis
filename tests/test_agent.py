@@ -1,7 +1,7 @@
 from genesis.adapter import Completion, ToolCall
 from genesis.agent import Agent
 from genesis.fakes import FakeAdapter
-from genesis.tools import ToolRegistry, add_tool
+from genesis.tools import ToolRegistry, add_tool, multiply_tool
 
 
 def test_agent_runs_a_tool_then_answers():
@@ -41,3 +41,24 @@ def test_agent_stops_at_budget():
     )
     agent = Agent(fake, ToolRegistry([add_tool]), token_budget=100)
     assert agent.run("expensive").stop_reason == "budget"
+
+
+def test_agent_dispatches_multiple_tools_in_one_turn():
+    fake = FakeAdapter(
+        [
+            Completion(
+                text="",
+                tool_calls=[
+                    ToolCall(id="c1", name="add", arguments={"a": 2, "b": 3}),
+                    ToolCall(id="c2", name="multiply", arguments={"a": 2, "b": 3}),
+                ],
+            ),
+            Completion(text="add is 5, multiply is 6"),
+        ]
+    )
+    agent = Agent(fake, ToolRegistry([add_tool, multiply_tool]))
+    result = agent.run("add and multiply 2 and 3")
+    assert result.stop_reason == "done"
+    fed = fake.calls[1]
+    assert any(m.role == "tool" and m.tool_call_id == "c1" and m.content == "5" for m in fed)
+    assert any(m.role == "tool" and m.tool_call_id == "c2" and m.content == "6" for m in fed)
