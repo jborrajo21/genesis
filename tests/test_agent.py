@@ -26,7 +26,9 @@ def test_agent_stops_at_max_turns():
     )
     fake = FakeAdapter([tool_req, tool_req])
     agent = Agent(fake, ToolRegistry([add_tool]), max_turns=2)
-    assert agent.run("loop forever").stop_reason == "max_turns"
+    result = agent.run("loop forever")
+    assert result.stop_reason == "max_turns"
+    assert result.turns == 2
 
 
 def test_agent_stops_at_budget():
@@ -40,7 +42,9 @@ def test_agent_stops_at_budget():
         ]
     )
     agent = Agent(fake, ToolRegistry([add_tool]), token_budget=100)
-    assert agent.run("expensive").stop_reason == "budget"
+    result = agent.run("expensive")
+    assert result.stop_reason == "budget"
+    assert result.usage == 1000
 
 
 def test_agent_dispatches_multiple_tools_in_one_turn():
@@ -59,6 +63,7 @@ def test_agent_dispatches_multiple_tools_in_one_turn():
     agent = Agent(fake, ToolRegistry([add_tool, multiply_tool]))
     result = agent.run("add and multiply 2 and 3")
     assert result.stop_reason == "done"
+    assert {c.name for c in result.tool_calls} == {"add", "multiply"}
     fed = fake.calls[1]
     assert any(m.role == "tool" and m.tool_call_id == "c1" and m.content == "5" for m in fed)
     assert any(m.role == "tool" and m.tool_call_id == "c2" and m.content == "6" for m in fed)

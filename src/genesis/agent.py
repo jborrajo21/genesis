@@ -1,7 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
-from genesis.adapter import Message, ModelAdapter
+from genesis.adapter import Message, ModelAdapter, ToolCall
 from genesis.tools import ToolRegistry
 
 
@@ -9,6 +9,9 @@ from genesis.tools import ToolRegistry
 class AgentResult:
     text: str
     stop_reason: Literal["done", "max_turns", "budget"]
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    usage: int = 0
+    turns: int = 0
 
 
 class Agent:
@@ -27,20 +30,22 @@ class Agent:
     def run(self, prompt: str) -> AgentResult:
         messages = [Message(role="user", content=prompt)]
         total_usage = 0
+        tool_calls = []
         last_text = ""
-        for _ in range(self._max_turns):
+        for turn in range(self._max_turns):
             completion = self._adapter.complete(messages, tools=self._registry.definitions())
             last_text = completion.text
             total_usage += completion.usage or 0
             if not completion.tool_calls:
-                return AgentResult(last_text, "done")
+                return AgentResult(last_text, "done", tool_calls, total_usage, turn + 1)
 
             if total_usage > self._token_budget:
-                return AgentResult(last_text, "budget")
+                return AgentResult(last_text, "budget", tool_calls, total_usage, turn + 1)
             messages.append(
                 Message(role="assistant", content=completion.text, tool_calls=completion.tool_calls)
             )
             for call in completion.tool_calls:
+                tool_calls.append(call)
                 result = self._registry.run(call.name, call.arguments)
                 messages.append(Message(role="tool", content=result, tool_call_id=call.id))
-        return AgentResult(last_text, "max_turns")
+        return AgentResult(last_text, "max_turns", tool_calls, total_usage, turn + 1)
