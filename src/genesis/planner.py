@@ -1,0 +1,118 @@
+import json
+import re
+from dataclasses import dataclass, field
+from typing import Any, Literal
+
+from genesis.adapter import Message, ModelAdapter
+
+_PLANNING_INSTRUCTION = """\
+You are a software project planner. Your plan will be handed to an AI agent that \
+builds the project from it, so the plan's detail and accuracy directly determine how \
+well the project gets built. Aim for a plan a competent developer could follow without \
+having to guess.
+
+Given the developer's idea and any answers provided so far, decide between two moves:
+
+- ASK, if key information is still missing to plan well. Return only the clarifying \
+questions whose answers would most change the plan — the smallest set that removes the \
+biggest uncertainties. Do not pad the list; ask fewer (or none) if the idea is already \
+clear enough to plan.
+
+- PLAN, if you have enough to write a thorough, buildable plan.
+
+Respond with ONLY a JSON object and no other text, in exactly one of these two shapes:
+
+To ask:
+{"status": "need_info", "questions": ["...", "..."]}
+
+To plan:
+{"status": "ready", "plan": {
+  "project_name": "short-name",
+  "summary": "one or two sentences on what it does",
+  "stack": ["language + version", "key library", "storage", "..."],
+  "phases": [
+    {"name": "Phase name", "steps": ["concrete actionable step", "..."]},
+    {"name": "Next phase", "steps": ["..."]}
+  ],
+  "manual_checklist": ["setup a human must do by hand, e.g. create an API key"]
+}}
+
+Make phases sequential and each step concrete and actionable — a developer should know \
+exactly what to do. Do not include a "supported" field; that is determined elsewhere.
+"""
+
+
+@dataclass
+class Phase:
+    name: str
+    steps: list[str]
+
+
+@dataclass
+class Plan:
+    project_name: str
+    summary: str
+    stack: list[str]
+    supported: bool
+    phases: list[Phase]
+    manual_checklist: list[str] = field(default_factory=list)
+
+
+class PlannerError(Exception):
+    pass
+
+
+@dataclass
+class RoundResult:
+    status: Literal["need_info", "ready"]
+    questions: list[str] = field(default_factory=list)
+    plan: Plan | None = None
+
+
+def _is_supported(stack: list[str]) -> bool:
+    return True  # CHANGE
+
+
+def _parse_plan(data: dict) -> Plan:
+    return Plan(
+        project_name=data["project_name"],
+        summary=data["summary"],
+        stack=data["stack"],
+        supported=_is_supported(data["stack"]),  # WE compute this, not the model
+        phases=[Phase(name=p["name"], steps=p["steps"]) for p in data["phases"]],
+        manual_checklist=data.get("manual_checklist", []),
+    )
+
+
+def _extract_json(text: str) -> Any:
+    text = text.strip()
+    fence = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
+    if fence:
+        text = fence.group(1).strip()
+    return json.loads(text)
+
+
+class Planner:
+    def __init__(self, adapter: ModelAdapter):
+        self._adapter = adapter
+
+    def _round(self, conversation: list[Message]) -> RoundResult:
+        messages = [Message(role="system", content=_PLANNING_INSTRUCTION)] + conversation
+        completion = self._adapter.complete(messages)
+        try:
+            data = _extract_json(completion.text)
+        except (json.JSONDecodeError, ValueError) as e:
+            raise PlannerError(f"model did not return valid JSON: {e}") from e
+
+        if not isinstance(data, dict):
+            raise PlannerError(f"expected a JSON object, got {type(data).__name__}")
+
+        status = data.get("status")
+        try:
+            if status == "need_info":
+                return RoundResult(status="need_info", questions=data["questions"])
+            if status == "ready":
+                return RoundResult(status="ready", plan=_parse_plan(data["plan"]))
+        except KeyError as e:
+            raise PlannerError(f"malformed {status!r} response, missing key: {e}") from e
+        raise PlannerError(f"unexpected status: {status!r}")
