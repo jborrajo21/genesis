@@ -1,6 +1,6 @@
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Literal
 
 from genesis.adapter import Message, ModelAdapter
@@ -69,8 +69,27 @@ class RoundResult:
     plan: Plan | None = None
 
 
+_UNSUPPORTED_MARKERS = (
+    "react",
+    "vue",
+    "flask",
+    "django",
+    "fastapi",
+    "node",
+    "ios",
+    "android",
+    "swift",
+    "kotlin",
+    "web",
+    "mobile",
+    "gui",
+    "electron",
+)
+
+
 def _is_supported(stack: list[str]) -> bool:
-    return True  # CHANGE
+    text = " ".join(stack).lower()
+    return "python" in text and not any(m in text for m in _UNSUPPORTED_MARKERS)
 
 
 def _parse_plan(data: dict) -> Plan:
@@ -148,3 +167,12 @@ class Planner:
         if result.status == "ready":
             return result.plan
         raise PlannerError("planner could not produce a plan within max_rounds")
+
+    def revise(self, plan: Plan, feedback: str) -> Plan:
+        plan_dict = asdict(plan)
+        plan_dict.pop("supported", None)
+        conversation = [
+            Message(role="assistant", content=json.dumps({"status": "ready", "plan": plan_dict})),
+            Message(role="user", content=f"Revise the plan based on this feedback: {feedback}"),
+        ]
+        return self._force_plan(conversation)

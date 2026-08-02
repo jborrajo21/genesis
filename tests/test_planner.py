@@ -2,7 +2,7 @@ import pytest
 
 from genesis.adapter import Completion, Message
 from genesis.fakes import FakeAdapter
-from genesis.planner import Planner, PlannerError, RoundResult
+from genesis.planner import Phase, Plan, Planner, PlannerError, RoundResult, _parse_plan
 
 
 def test_round_asks_when_info_missing():
@@ -73,3 +73,51 @@ def test_plan_raises_when_never_ready():
     fake = FakeAdapter([need, need, need])
     with pytest.raises(PlannerError):
         Planner(fake).plan("vague", answer_fn=lambda qs: ["a"], max_rounds=2)
+
+
+def test_parse_plan_flags_python_cli_supported():
+    data = {
+        "project_name": "todo",
+        "summary": "s",
+        "stack": ["Python 3.11", "argparse"],
+        "phases": [{"name": "setup", "steps": ["init"]}],
+        "manual_checklist": [],
+    }
+    assert _parse_plan(data).supported is True
+
+
+def test_parse_plan_flags_web_unsupported():
+    data = {
+        "project_name": "app",
+        "summary": "s",
+        "stack": ["React", "Node"],
+        "phases": [{"name": "ui", "steps": ["build"]}],
+        "manual_checklist": ["install Node"],
+    }
+    plan = _parse_plan(data)
+    assert plan.supported is False
+    assert plan.manual_checklist
+
+
+def test_revise_returns_updated_plan():
+    original = Plan(
+        project_name="todo",
+        summary="s1",
+        stack=["Python 3.11"],
+        supported=True,
+        phases=[Phase("setup", ["init"])],
+    )
+    revised = '{"status": "ready", \
+        "plan": {\
+            "project_name": "todo", \
+            "summary": "s2", \
+            "stack": ["Python 3.11"], \
+                "phases": [{\
+                    "name": "setup", \
+                    "steps": ["init", "add config"]\
+                }], \
+            "manual_checklist": []}}'
+    fake = FakeAdapter([Completion(text=revised)])
+    result = Planner(fake).revise(original, "add a config step")
+    assert result.summary == "s2"
+    assert any("add a config step" in m.content for m in fake.calls[0])
