@@ -46,3 +46,30 @@ def test_round_parses_ready_plan():
     assert result.status == "ready"
     assert result.plan.project_name == "todo"
     assert result.plan.phases[0].name == "setup"
+
+
+def test_plan_loops_clarify_then_ready():
+    need = Completion(text='{"status": "need_info", "questions": ["Which storage?"]}')
+    ready = Completion(
+        text='{"status": "ready", \
+            "plan": \
+                {"project_name": "todo", \
+                    "summary": "s", \
+                    "stack": ["Python 3.11"], \
+                    "phases": [\
+                        {"name": "setup", \
+                        "steps": ["init"]}\
+                            ], \
+                    "manual_checklist": []}}'
+    )
+    fake = FakeAdapter([need, ready])
+    result = Planner(fake).plan("a todo app", answer_fn=lambda qs: ["SQLite"])
+    assert result.project_name == "todo"
+    assert any("SQLite" in m.content for m in fake.calls[1])
+
+
+def test_plan_raises_when_never_ready():
+    need = Completion(text='{"status": "need_info", "questions": ["q?"]}')
+    fake = FakeAdapter([need, need, need])
+    with pytest.raises(PlannerError):
+        Planner(fake).plan("vague", answer_fn=lambda qs: ["a"], max_rounds=2)

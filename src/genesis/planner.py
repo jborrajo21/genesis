@@ -1,7 +1,7 @@
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from genesis.adapter import Message, ModelAdapter
 
@@ -92,6 +92,10 @@ def _extract_json(text: str) -> Any:
     return json.loads(text)
 
 
+def _format_qa(questions: list[str], answers: list[str]) -> str:
+    return "\n".join(f"Q: {q}\nA: {a}" for q, a in zip(questions, answers))
+
+
 class Planner:
     def __init__(self, adapter: ModelAdapter):
         self._adapter = adapter
@@ -116,3 +120,31 @@ class Planner:
         except KeyError as e:
             raise PlannerError(f"malformed {status!r} response, missing key: {e}") from e
         raise PlannerError(f"unexpected status: {status!r}")
+
+    def plan(
+        self,
+        idea: str,
+        answer_fn: Callable[[list[str]], list[str]],
+        max_rounds: int = 4,
+    ) -> Plan:
+        conversation = [Message(role="user", content=idea)]
+        for _ in range(max_rounds):
+            result = self._round(conversation)
+            if result.status == "ready":
+                return result.plan
+            answers = answer_fn(result.questions)
+            conversation.append(Message(role="user", content=_format_qa(result.questions, answers)))
+        return self._force_plan(conversation)
+
+    def _force_plan(self, conversation: list[Message]) -> Plan:
+        convo = conversation + [
+            Message(
+                role="user",
+                content="No more clarification rounds. "
+                "Produce the best complete plan you can now with status 'ready'.",
+            )
+        ]
+        result = self._round(convo)
+        if result.status == "ready":
+            return result.plan
+        raise PlannerError("planner could not produce a plan within max_rounds")
