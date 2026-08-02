@@ -22,6 +22,7 @@ venv/
 .vscode/
 .idea/
 
-# Personal
+# Personal / working agreement — kept out of the public repo
 docs/
 scratch.py
+CLAUDE.md

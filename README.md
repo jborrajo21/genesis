@@ -62,6 +62,4 @@ Live paths (planner, real adapter) authenticate from the environment (`ANTHROPIC
 
 ## Docs
 
-- [`docs/genesis-plan.md`](docs/genesis-plan.md) — the full plan and constraints.
-- [`DECISIONS.md`](DECISIONS.md) — the decision log.
-- `docs/phase*.md` — per-phase task breakdowns.
+- [`DECISIONS.md`](DECISIONS.md) — the decision log (every non-trivial choice, with constraint-based reasoning).
