@@ -1,0 +1,98 @@
+import re
+import shutil
+import subprocess
+import venv
+from dataclasses import dataclass
+from pathlib import Path
+
+from genesis.planner import Plan
+
+_DEFAULT_NAME = "project"
+_TEMPLATE_DIR = Path(__file__).resolve().parent.parent.parent / "templates" / "python-cli"
+_TEMPLATE_NAME = "greetly"
+_TEMPLATE_DESCRIPTION = "A tiny greeting CLI"
+
+
+@dataclass
+class BuildResult:
+    installed: bool
+    tested: bool
+    output: str
+
+    @property
+    def ok(self) -> bool:
+        return self.installed and self.tested
+
+
+def normalize(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    if not slug:
+        return _DEFAULT_NAME
+    if slug[0].isdigit():
+        slug = "p_" + slug
+    return slug
+
+
+def scaffold(plan: Plan, target_dir: Path) -> Path:
+    name = normalize(plan.project_name)
+
+    shutil.copytree(
+        _TEMPLATE_DIR,
+        target_dir,
+        ignore=shutil.ignore_patterns(".pytest_cache", ".ruff_cache", "__pycache__"),
+    )
+
+    for path in target_dir.rglob("*"):
+        if path.is_file():
+            text = path.read_text()
+            if _TEMPLATE_NAME in text:
+                path.write_text(text.replace(_TEMPLATE_NAME, name))
+
+    (target_dir / "src" / _TEMPLATE_NAME).rename(target_dir / "src" / name)
+
+    pyproject = target_dir / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text().replace(_TEMPLATE_DESCRIPTION, plan.summary))
+    (target_dir / "PLAN.md").write_text(_render_plan_md(plan))
+
+    return target_dir
+
+
+def _render_plan_md(plan: Plan) -> str:
+    lines = [f"# {plan.project_name}", "", plan.summary, "", "## Stack", ""]
+    lines += [f"- {item}" for item in plan.stack]
+    lines += ["", "## Phases", ""]
+    for phase in plan.phases:
+        lines.append(f"### {phase.name}")
+        lines += [f"- {step}" for step in phase.steps]
+        lines.append("")
+    if plan.manual_checklist:
+        lines += ["## Manual checklist", ""]
+        lines += [f"- [ ] {item}" for item in plan.manual_checklist]
+    return "\n".join(lines) + "\n"
+
+
+def build_and_test(repo_dir: Path) -> BuildResult:
+    repo_dir = repo_dir.resolve()
+    venv_dir = repo_dir / ".venv"
+    venv.create(venv_dir, with_pip=True)
+    py = venv_dir / "bin" / "python"
+
+    install = subprocess.run(
+        [str(py), "-m", "pip", "install", "-e", ".[dev]"],
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
+    )
+    if install.returncode != 0:
+        return BuildResult(installed=False, tested=False, output=install.stdout + install.stderr)
+    test = subprocess.run(
+        [str(py), "-m", "pytest"],
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
+    )
+    return BuildResult(
+        installed=True,
+        tested=test.returncode == 0,
+        output=install.stdout + install.stderr + test.stdout + test.stderr,
+    )

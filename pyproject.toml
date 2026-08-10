@@ -21,3 +21,4 @@ select = ["E", "F", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: builds a generated repo in a real venv (needs network; ~7s)"]
