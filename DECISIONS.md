@@ -308,3 +308,43 @@ the core import path; only code that has opted into the extra may import it.
 - **Reason:** the eval's claim is "a freshly generated repo installs from clean and passes its own tests" — only a fresh venv proves it. Installing into the Genesis interpreter can false-pass (deps already satisfied) and mutates the working env; tox/nox adds a dependency and hides the mechanism, against the no-scaffolding-library / learning constraints. Structured result over bool because the Block 6 eval harness must report which half failed and surface `output` to diagnose, which a bool discards; `installed`/`tested` are separate so an install failure is distinguishable from a test failure. Cost accepted: the check needs network (pip fetches hatchling to build) and is slow, so it is the marked-slow integration test, not a fast unit test.
 - **Scope:** template-constant
 - **Eval hook:** `build_and_test(dir)` on a scaffolded repo returns `installed=True`, `tested=True`, `ok=True`; a repo with a deliberately broken test yields `installed=True, tested=False`
+
+## D-033: CLI design — three separate commands vs unified
+
+- **Options:** single `genesis` command with subcommands (plan|scaffold|create) vs three separate commands vs one unified "do-everything" command
+- **Choice:** three separate commands: `genesis plan`, `genesis scaffold`, `genesis create`
+- **Reason:** decouples the workflows. A user who only wants planning output can use `plan` standalone. Someone with an external plan can use `scaffold`. The `create` command is the convenience wrapper for end-to-end. Each is independently useful and composable, and the mental model is simpler than mode-flags on a single command. Argparse subcommands are still unified under one entry point, so this is syntactically clean (not literal file-based commands).
+- **Scope:** CLI interface
+- **Eval hook:** `genesis plan --help`, `genesis scaffold --help`, `genesis create --help` each show distinct usage; running any command with invalid args shows command-specific error
+
+## D-034: Argument parsing — argparse vs Click/Typer
+
+- **Options:** stdlib `argparse` vs Click (third-party) vs Typer (async, modern)
+- **Choice:** argparse (stdlib only)
+- **Reason:** minimalism (no new dependency), aligns with D-006 (no scaffolding libs) and the no-dependencies philosophy. Argparse is verbose but clear and zero-cost. Click and Typer would add runtime deps to Genesis, which users who import the library as a module (not just the CLI) would inherit.
+- **Scope:** CLI implementation
+- **Eval hook:** `pip install genesis` (no extra) runs all three CLI commands with `--help` using only stdlib
+
+## D-035: Ollama adapter implementation — OpenAI-compatible endpoint
+
+- **Options:** use Ollama SDK directly vs OpenAI-compatible `/v1/chat/completions` endpoint vs raw REST wrapper
+- **Choice:** OpenAI-compatible `/v1/chat/completions` endpoint (default: `http://localhost:11434/v1`)
+- **Reason:** Ollama provides this for free, no new dependency beyond stdlib `urllib`, and it is provider-agnostic — the endpoint is a generic interface, not Ollama-specific. Using the SDK would couple Genesis to Ollama; the endpoint is both simpler and more portable. Cost accepted: simpler error handling and no automatic retries (raw HTTP), but acceptable for a local server.
+- **Scope:** adapter implementation
+- **Eval hook:** with Ollama running, `OllamaAdapter(model="mistral").complete([...])` returns a `Completion`; with Ollama not running, connection error is raised and caught gracefully by the CLI
+
+## D-036: Tool-calling with Ollama — accept but return empty
+
+- **Options:** try to use tools with Ollama (unreliable) vs accept tools param but return `tool_calls=[]` vs raise an error if tools requested
+- **Choice:** accept `tools` param in `complete()` but return `tool_calls=[]` (no tool calls). Stay Protocol-compatible; silently degrade when tools are present.
+- **Reason:** Ollama's tool-calling is unreliable and most open-source models don't support function-calling well. Rather than raise an exception (which would fail the loop), accepting but returning empty tool calls lets Ollama degrade gracefully — it will answer text-only, and the agent loop will treat it as done. This preserves Protocol conformance (D-012). For the planner (which has no tools in its calls), Ollama works identically. Honest limitation: documented as "tool-calling not supported with Ollama."
+- **Scope:** adapter implementation
+- **Eval hook:** `OllamaAdapter.complete([...], tools=[...])` returns a `Completion` with `tool_calls=[]` (not an exception); the same call without tools returns text normally
+
+## D-037: Token counting for Ollama — track 0 / no budget enforcement
+
+- **Options:** estimate tokens from prompt/response length vs track 0 (no budget enforcement) vs try to infer from Ollama API
+- **Choice:** `OllamaAdapter.complete()` returns `Completion.usage = 0` always. Cost cap guardrails become a no-op with Ollama.
+- **Reason:** Ollama doesn't report token counts in its responses and estimation is unreliable. Users choosing Ollama accept "free local" means "no token tracking." The `max_turns` guardrail still works (structural iteration cap), but the `token_budget` cap is disabled by always reporting 0 usage. This is an honest trade-off: free local execution vs cost visibility. Documented in README as a limitation.
+- **Scope:** adapter implementation
+- **Eval hook:** `OllamaAdapter.complete(...)` returns `Completion` with `usage=0`; a loop with Ollama respects `max_turns` but ignores `token_budget`

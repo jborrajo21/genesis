@@ -9,6 +9,9 @@ description = "Project Scaffolding Agent"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.scripts]
+genesis = "genesis.cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
 anthropic = ["anthropic"]
