@@ -4,11 +4,11 @@ An AI agent that turns a project idea into a **structured, buildable plan** and 
 
 ![CI](https://github.com/jborrajo21/genesis/actions/workflows/ci.yml/badge.svg)
 
-> **Status: in active development.** Blocks 1–5 of 8 are built; the eval harness (as a CI gate) and live deploy are next. See the [roadmap](#roadmap).
+> **Status: in active development.** Blocks 1–6 of 8 are built; live deploy is next. See the [roadmap](#roadmap).
 
 ## What it is
 
-Genesis takes a project idea, asks the clarifying questions that would most change the outcome, and produces a typed, phased plan good enough for an AI to build from — while being **honest about what it can't scaffold**. It's deliberately framed as a scaffolding agent with engineering discipline, not an LLM wrapper: the two things that make it worth anything are the (upcoming) deterministic eval harness and a live deploy.
+Genesis takes a project idea, asks the clarifying questions that would most change the outcome, and produces a typed, phased plan good enough for an AI to build from — while being **honest about what it can't scaffold**. It's deliberately framed as a scaffolding agent with engineering discipline, not an LLM wrapper: the two things that make it worth anything are the deterministic eval harness (now a live CI gate) and a live deploy.
 
 ```
 idea → clarifying questions → structured Plan → scaffolded repo (installs + tests pass)
@@ -22,6 +22,7 @@ idea → clarifying questions → structured Plan → scaffolded repo (installs 
 - **Agent loop** — a hand-built tool-using loop (an LLM autonomously calling tools until done) with guardrails (`max_turns`, a token budget) and per-run telemetry (tools called, tokens, turns). Runs on the adapter Protocol, verified live and offline.
 - **Planner** — an adaptive, bounded loop that turns an idea into a typed `Plan`: it decides each round whether to ask more or plan, capped so it can never interrogate forever, with honest limitations (a stack it can't scaffold still gets a plan plus a manual checklist).
 - **Scaffolder** — a deterministic (no-LLM, no-network) renderer that turns a `Plan` into a real Python-CLI repo: it copies the vendored template, atomically renames the package across every coupled site, ships the plan alongside the code as `PLAN.md`, and **verifies the result installs and passes its own tests in a fresh venv**. This is the deterministic half of the eval harness — the check that a generated repo *builds and its tests pass*.
+- **Eval harness as a CI gate** — the scaffolder's `build_and_test()` check (which creates a fresh venv, installs the generated repo, and runs its tests) is now wired into GitHub Actions. Every push runs the same deterministic check in CI: if a generated repo cannot install or pass its own tests, the build fails. No model calls, no subjective grading — the proof is reproducible and offline.
 
 ## Roadmap
 
@@ -32,7 +33,7 @@ idea → clarifying questions → structured Plan → scaffolded repo (installs 
 | 3 | Agent loop + guardrails | ✅ |
 | 4 | Planner (idea → structured plan) | ✅ |
 | 5 | Scaffolder — generate a repo that builds and passes its own tests | ✅ |
-| 6 | Eval harness — the scaffolder eval as a CI gate | ⬜ |
+| 6 | Eval harness — the scaffolder eval as a CI gate | ✅ |
 | 7 | Live deploy (ECS Express Mode) | ⬜ |
 | 8 | README + eval numbers + polish | ⬜ |
 
@@ -60,7 +61,7 @@ Live paths (planner, real adapter) authenticate from the environment (`ANTHROPIC
 - The planner's budget is a **soft, forward-looking cap** — it bounds the next round, not the current one, so usage can overshoot by up to a turn.
 - The planner resends its instruction each round; **prompt caching** is a future optimization, not yet applied.
 - The scaffolder renders **one template** (Python CLI) and generates a **skeleton, not the finished project** — it proves generation *correctness* (a valid, installable, test-passing repo for any name), not that the app does what the plan describes; the plan rides along in `PLAN.md` to build from.
-- The eval harness (as a CI gate) and live deploy are **not built yet** (Blocks 6–7).
+- The live deploy is **not built yet** (Block 7).
 
 ## Docs
 

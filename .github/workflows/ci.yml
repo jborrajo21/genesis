@@ -3,11 +3,22 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-    ci:
+    template:
         runs-on: ubuntu-latest
         defaults: 
             run: 
                 working-directory: templates/python-cli
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-python@v5
+              with:
+                python-version: "3.11"
+            - run: pip install -e ".[dev]"
+            - run: ruff check .
+            - run: ruff format --check .
+            - run: pytest
+    genesis:
+        runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
             - uses: actions/setup-python@v5
