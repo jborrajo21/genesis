@@ -1,10 +1,10 @@
-import anthropic
-
 from genesis.adapter import Completion, Message, ToolCall, ToolDef
 
 
 class AnthropicAdapter:
     def __init__(self, model: str = "claude-haiku-4-5", max_tokens: int = 20):
+        import anthropic
+
         self._client = anthropic.Anthropic()
         self._model = model
         self._max_tokens = max_tokens
