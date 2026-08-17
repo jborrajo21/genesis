@@ -13,10 +13,9 @@ def main(argv=None):
     plan_parser.add_argument("idea", help="project idea")
     plan_parser.add_argument("--adapter", choices=["anthropic", "ollama"], default="anthropic")
     plan_parser.add_argument("--model", type=str, default="haiku")
-    plan_parser.add_argument(
-        "--no-interactive", action="store_false", dest="interactive", default=True
-    )
     plan_parser.add_argument("--output", type=str, help="path to save plan JSON")
+    plan_parser.add_argument("--max-rounds", type=int, default=4, help="max planning rounds")
+    plan_parser.add_argument("--max-tokens", type=int, default=1000, help="max tokens per call")
 
     scaffold_parser = subparsers.add_parser(
         "scaffold", help="create a structured and tested repo from a plan"
@@ -32,16 +31,22 @@ def main(argv=None):
     create_parser.add_argument("output_dir", help="directory to scaffold into")
     create_parser.add_argument("--adapter", choices=["anthropic", "ollama"], default="anthropic")
     create_parser.add_argument("--model", type=str, default="haiku")
-    create_parser.add_argument(
-        "--no-interactive", action="store_false", dest="interactive", default=True
-    )
     create_parser.add_argument("--output", type=str, help="path to save plan JSON")
     create_parser.add_argument("--force", action="store_true")
+    create_parser.add_argument("--max-rounds", type=int, default=4, help="max planning rounds")
+    create_parser.add_argument("--max-tokens", type=int, default=1000, help="max tokens per call")
 
     args = parser.parse_args(argv)
 
     if args.command == "plan":
-        return cmd_plan(args.idea, args.adapter, args.model, args.interactive, args.output)
+        return cmd_plan(
+            args.idea,
+            args.adapter,
+            args.model,
+            args.output,
+            args.max_rounds,
+            args.max_tokens,
+        )
 
     if args.command == "scaffold":
         return cmd_scaffold(args.plan_json, args.output_dir, args.force)
@@ -52,9 +57,10 @@ def main(argv=None):
             args.output_dir,
             args.adapter,
             args.model,
-            args.interactive,
             args.output,
             args.force,
+            args.max_rounds,
+            args.max_tokens,
         )
 
     return 0
