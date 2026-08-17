@@ -10,9 +10,9 @@ def main(argv=None):
 
     subparsers = parser.add_subparsers(dest="command", required=True)
     plan_parser = subparsers.add_parser("plan", help="create a structured plan from an idea")
-    plan_parser.add_argument("idea", help="project idea")
-    plan_parser.add_argument("--adapter", choices=["anthropic", "ollama"], default="anthropic")
-    plan_parser.add_argument("--model", type=str, default="haiku")
+    plan_parser.add_argument("idea", nargs="?", default=None, help="project idea")
+    plan_parser.add_argument("--adapter", default=None, help="Adapter to use (anthropic or ollama)")
+    plan_parser.add_argument("--model", default=None, help="Model name")
     plan_parser.add_argument("--output", type=str, help="path to save plan JSON")
     plan_parser.add_argument("--max-rounds", type=int, default=4, help="max planning rounds")
     plan_parser.add_argument("--max-tokens", type=int, default=1000, help="max tokens per call")
@@ -27,10 +27,14 @@ def main(argv=None):
     create_parser = subparsers.add_parser(
         "create", help="create a structured and tested repo and a structured plan from an idea"
     )
-    create_parser.add_argument("idea", help="project idea")
-    create_parser.add_argument("output_dir", help="directory to scaffold into")
-    create_parser.add_argument("--adapter", choices=["anthropic", "ollama"], default="anthropic")
-    create_parser.add_argument("--model", type=str, default="haiku")
+    create_parser.add_argument("idea", nargs="?", default=None, help="project idea")
+    create_parser.add_argument(
+        "output_dir", nargs="?", default=None, help="directory to scaffold into"
+    )
+    create_parser.add_argument(
+        "--adapter", default=None, help="Adapter to use (anthropic or ollama)"
+    )
+    create_parser.add_argument("--model", default=None, help="Model name")
     create_parser.add_argument("--output", type=str, help="path to save plan JSON")
     create_parser.add_argument("--force", action="store_true")
     create_parser.add_argument("--max-rounds", type=int, default=4, help="max planning rounds")
