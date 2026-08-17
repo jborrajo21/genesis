@@ -14,8 +14,8 @@ def main(argv=None):
     plan_parser.add_argument("--adapter", default=None, help="Adapter to use (anthropic or ollama)")
     plan_parser.add_argument("--model", default=None, help="Model name")
     plan_parser.add_argument("--output", type=str, help="path to save plan JSON")
-    plan_parser.add_argument("--max-rounds", type=int, default=4, help="max planning rounds")
-    plan_parser.add_argument("--max-tokens", type=int, default=1000, help="max tokens per call")
+    plan_parser.add_argument("--max-rounds", type=int, default=6, help="max planning rounds")
+    plan_parser.add_argument("--max-tokens", type=int, default=10000, help="max tokens per call")
 
     scaffold_parser = subparsers.add_parser(
         "scaffold", help="create a structured and tested repo from a plan"
@@ -37,8 +37,8 @@ def main(argv=None):
     create_parser.add_argument("--model", default=None, help="Model name")
     create_parser.add_argument("--output", type=str, help="path to save plan JSON")
     create_parser.add_argument("--force", action="store_true")
-    create_parser.add_argument("--max-rounds", type=int, default=4, help="max planning rounds")
-    create_parser.add_argument("--max-tokens", type=int, default=1000, help="max tokens per call")
+    create_parser.add_argument("--max-rounds", type=int, default=6, help="max planning rounds")
+    create_parser.add_argument("--max-tokens", type=int, default=10000, help="max tokens per call")
 
     args = parser.parse_args(argv)
 

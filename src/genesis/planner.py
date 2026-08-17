@@ -3,7 +3,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Literal
 
-from genesis.adapter import Message, ModelAdapter
+from genesis.adapter import Message, ModelAdapter, StopReason
 
 _PLANNING_INSTRUCTION = """\
 You are a software project planner. Your plan will be handed to an AI agent that \
@@ -122,6 +122,10 @@ class Planner:
     def _round(self, conversation: list[Message]) -> RoundResult:
         messages = [Message(role="system", content=_PLANNING_INSTRUCTION)] + conversation
         completion = self._adapter.complete(messages)
+        if completion.stop_reason is StopReason.TRUNCATED:
+            raise PlannerError(
+                "response was truncated by max_tokens — increase --max-tokens and try again"
+            )
         try:
             data = _extract_json(completion.text)
         except (json.JSONDecodeError, ValueError) as e:

@@ -1,4 +1,12 @@
-from genesis.adapter import Completion, Message, ToolCall, ToolDef
+from genesis.adapter import Completion, Message, StopReason, ToolCall, ToolDef
+
+_STOP_REASON_MAP = {
+    "end_turn": StopReason.DONE,
+    "stop_sequence": StopReason.DONE,
+    "max_tokens": StopReason.TRUNCATED,
+    "tool_use": StopReason.TOOL_USE,
+    "refusal": StopReason.OTHER,
+}
 
 
 class AnthropicAdapter:
@@ -36,7 +44,12 @@ class AnthropicAdapter:
             if b.type == "tool_use"
         ]
         usage = response.usage.input_tokens + response.usage.output_tokens
-        return Completion(text=text, tool_calls=tool_calls, usage=usage)
+        return Completion(
+            text=text,
+            tool_calls=tool_calls,
+            usage=usage,
+            stop_reason=_STOP_REASON_MAP.get(response.stop_reason, StopReason.OTHER),
+        )
 
     def _to_anthropic(self, m: Message) -> dict:
         if m.role == "tool":
