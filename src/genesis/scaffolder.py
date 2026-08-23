@@ -34,6 +34,9 @@ def normalize(name: str) -> str:
 
 
 def scaffold(plan: Plan, target_dir: Path) -> Path:
+    if not plan.supported:
+        return _scaffold_generic(plan, target_dir)
+
     name = normalize(plan.project_name)
 
     shutil.copytree(
@@ -95,4 +98,22 @@ def build_and_test(repo_dir: Path) -> BuildResult:
         installed=True,
         tested=test.returncode == 0,
         output=install.stdout + install.stderr + test.stdout + test.stderr,
+    )
+
+
+def _scaffold_generic(plan: Plan, target_dir: Path) -> Path:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    (target_dir / "PLAN.md").write_text(_render_plan_md(plan))
+    (target_dir / "README.md").write_text(_render_generic_readme(plan))
+    return target_dir
+
+
+def _render_generic_readme(plan: Plan) -> str:
+    stack = ", ".join(plan.stack)
+    return (
+        f"# {plan.project_name}\n\n"
+        f"{plan.summary}\n\n"
+        f"Genesis doesn't have an automated scaffold for this stack ({stack}), "
+        "so no code was generated. Follow PLAN.md phase by phase to build it "
+        "by hand.\n"
     )

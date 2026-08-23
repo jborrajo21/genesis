@@ -20,8 +20,10 @@ def main(argv=None):
     scaffold_parser = subparsers.add_parser(
         "scaffold", help="create a structured and tested repo from a plan"
     )
-    scaffold_parser.add_argument("plan_json", help="path to plan JSON")
-    scaffold_parser.add_argument("output_dir", help="directory to scaffold into")
+    scaffold_parser.add_argument("plan_json", nargs="?", default=None, help="path to plan JSON")
+    scaffold_parser.add_argument(
+        "output_dir", nargs="?", default=None, help="directory to scaffold into"
+    )
     scaffold_parser.add_argument("--force", action="store_true")
 
     create_parser = subparsers.add_parser(

@@ -4,82 +4,30 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+from genesis.anthropic_adapter import SUPPORTED_MODELS as ANTHROPIC_MODELS
 from genesis.anthropic_adapter import AnthropicAdapter
+from genesis.interface import (
+    _get_idea,
+    _get_json_path,
+    _get_output_dir,
+    _select_adapter,
+    _select_model,
+    print_error,
+    print_progress,
+    print_success,
+)
 from genesis.planner import Plan, Planner, PlannerError, _parse_plan
 from genesis.scaffolder import build_and_test, scaffold
 
-
-def print_progress(msg: str) -> None:
-    """Print a progress message."""
-    print(f"\n→ {msg}...", end=" ", flush=True)
-
-
-def print_success(msg: str) -> None:
-    """Print a success message."""
-    print(f"✓ {msg}")
-
-
-def print_error(msg: str) -> None:
-    """Print an error message to stderr."""
-    print(f"✗ {msg}", file=sys.stderr)
-
-
-def _get_idea() -> str:
-    """Prompt for idea if not provided."""
-    print("\nWhat's your project idea?")
-    return input("→ ").strip()
-
-
-def _get_output_dir() -> str:
-    """Prompt for output directory if not provided."""
-    print("\nWhere should we scaffold it?")
-    return input("→ ").strip()
-
-
-def _select_adapter() -> str:
-    """Prompt user to select adapter if not provided."""
-    print("\nChoose adapter:")
-    print("1) Anthropic")
-    print("2) Ollama")
-    choice = input("→ ").strip()
-    if choice == "1":
-        return "anthropic"
-    elif choice == "2":
-        return "ollama"
-    else:
-        raise ValueError("Invalid choice")
-
-
-def _select_model(adapter: str) -> str:
-    """Prompt user to select model if not provided."""
-    if adapter == "anthropic":
-        models = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]
-    elif adapter == "ollama":
-        models = ["qwen2.5-coder:7b", "gemma4:26b", "qwen3-coder:30b-a3b"]
-    else:
-        raise ValueError(f"Unknown adapter: {adapter}")
-
-    print(f"\nChoose {adapter} model:")
-    for i, model in enumerate(models, 1):
-        print(f"{i}) {model}")
-    print(f"{len(models) + 1}) Enter custom model name")
-
-    choice = input("→ ").strip()
-    try:
-        idx = int(choice) - 1
-        if idx == len(models):
-            return input("Model name: ").strip()
-        return models[idx]
-    except (ValueError, IndexError):
-        raise ValueError("Invalid choice")
+# from genesis.ollama_adapter import SUPPORTED_MODELS as OLLAMA_MODELS
 
 
 def _create_plan(
     idea: str | None,
     adapter_str: str,
     model: str,
-    max_rounds: int = 4,
-    max_tokens: int = 1000,
+    max_rounds: int = 6,
+    max_tokens: int = 10000,
 ) -> Plan:
     """Create a plan from an idea. Raises PlannerError on failure."""
     if adapter_str is None:
@@ -87,10 +35,9 @@ def _create_plan(
     if model is None:
         model = _select_model(adapter_str)
 
-    # Validate model
     valid_models = {
-        "anthropic": ["claude-haiku-4-5", "claude-opus-4-1"],
-        "ollama": ["llama2", "mistral", "neural-chat"],
+        "anthropic": ANTHROPIC_MODELS,
+        # "ollama": OLLAMA_MODELS,
     }
     if model not in valid_models.get(adapter_str, []):
         raise ValueError(f"Unknown model '{model}' for adapter '{adapter_str}'")
@@ -120,8 +67,8 @@ def cmd_plan(
     adapter_str: str,
     model: str,
     output_path: str,
-    max_rounds: int = 4,
-    max_tokens: int = 1000,
+    max_rounds: int = 6,
+    max_tokens: int = 10000,
 ) -> int:
     """Plan an idea and return exit code."""
     try:
@@ -138,6 +85,15 @@ def cmd_plan(
             with open(output_path, "w") as f:
                 f.write(plan_json)
             print_success(f"Plan saved to {output_path}")
+        elif sys.stdin.isatty():
+            print("\nSave this plan to a file?")
+            save = input("Path (leave blank to print instead) → ").strip()
+            if save:
+                with open(save, "w") as f:
+                    f.write(plan_json)
+                print_success(f"Plan saved to {save}")
+            else:
+                print(plan_json)
         else:
             print(plan_json)
 
@@ -157,11 +113,15 @@ def cmd_plan(
         return 1
 
 
-def cmd_scaffold(plan_json: str, output_dir: str | None, force: bool) -> int:
+def cmd_scaffold(plan_json: str | None, output_dir: str | None, force: bool) -> int:
     """Scaffold a plan and return exit code."""
     try:
         if output_dir is None:
             output_dir = _get_output_dir()
+        if plan_json is None:
+            plan_json = _get_json_path()
+        else:
+            plan_json = Path(plan_json).read_text()
         print_progress("Scaffolding")
         plan_data = json.loads(plan_json)
         plan = _parse_plan(plan_data)
@@ -174,6 +134,11 @@ def cmd_scaffold(plan_json: str, output_dir: str | None, force: bool) -> int:
             shutil.rmtree(target_path)
 
         repo_dir = scaffold(plan, target_path)
+
+        if not plan.supported:
+            print_success(f"Scaffolded plan to {repo_dir} (unsupported stack — see PLAN.md)")
+            return 0
+
         res = build_and_test(repo_dir)
 
         print_success(f"Scaffolded to {repo_dir}")
@@ -200,8 +165,8 @@ def cmd_create(
     model: str,
     output_path: str | None,
     force: bool,
-    max_rounds: int = 4,
-    max_tokens: int = 1000,
+    max_rounds: int = 6,
+    max_tokens: int = 10000,
 ) -> int:
     """Plan and scaffold end-to-end."""
     try:
@@ -218,8 +183,6 @@ def cmd_create(
             with open(output_path, "w") as f:
                 f.write(plan_json)
             print_success(f"Plan saved to {output_path}")
-        else:
-            print(plan_json)
 
         target = Path(output_dir)
         if target.exists():

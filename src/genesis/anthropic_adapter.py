@@ -8,6 +8,8 @@ _STOP_REASON_MAP = {
     "refusal": StopReason.OTHER,
 }
 
+SUPPORTED_MODELS = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]
+
 
 class AnthropicAdapter:
     def __init__(self, model: str = "claude-haiku-4-5", max_tokens: int = 20):
