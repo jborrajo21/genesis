@@ -15,13 +15,15 @@ idea → clarifying questions → structured Plan → scaffolded repo (installs 
                                     ↑ made a CI gate by the deterministic eval harness (Block 6)
 ```
 
+
 ## Built so far
 
+- **CLI** — three subcommands: `plan` (idea → plan JSON, printed to stdout or saved with `--output`, with an interactive save prompt when run in a terminal without the flag), `scaffold` (plan JSON → repo, accepting either a file path or piped content, with `--force` to overwrite an existing directory), and `create` (plan + scaffold end-to-end, prompting before overwriting an existing output directory). Idea, output directory, adapter, and model are prompted for interactively when not passed as arguments; `--max-rounds` (default 6) and `--max-tokens` (default 10000) are flag-only, since their defaults cover the common case.
 - **Python CLI template** — a minimal, correct reference repo (packaging, tests, lint, CI) that the scaffolder will later generate. Hand-built first, so its generated output can be evaluated against something understood line-by-line.
-- **Model-agnostic backend adapter** — a `ModelAdapter` Protocol that hides the provider behind a uniform `complete()` call. An Anthropic adapter implements it; the rest of the system never imports a provider SDK, so models are swappable and everything is testable offline against a `FakeAdapter`.
+- **Model-agnostic backend adapter** — a `ModelAdapter` Protocol that hides the provider behind a uniform `complete()` call. An Anthropic adapter implements it today; an Ollama adapter is stubbed but not yet added. The rest of the system never imports a provider SDK, so models are swappable and everything is testable offline against a `FakeAdapter`.
 - **Agent loop** — a hand-built tool-using loop (an LLM autonomously calling tools until done) with guardrails (`max_turns`, a token budget) and per-run telemetry (tools called, tokens, turns). Runs on the adapter Protocol, verified live and offline.
 - **Planner** — an adaptive, bounded loop that turns an idea into a typed `Plan`: it decides each round whether to ask more or plan, capped so it can never interrogate forever, with honest limitations (a stack it can't scaffold still gets a plan plus a manual checklist).
-- **Scaffolder** — a deterministic (no-LLM, no-network) renderer that turns a `Plan` into a real Python-CLI repo: it copies the vendored template, atomically renames the package across every coupled site, ships the plan alongside the code as `PLAN.md`, and **verifies the result installs and passes its own tests in a fresh venv**. This is the deterministic half of the eval harness — the check that a generated repo *builds and its tests pass*.
+- **Scaffolder** — a deterministic (no-LLM, no-network) renderer that turns a `Plan` into a real Python-CLI repo: it copies the vendored template, atomically renames the package across every coupled site, ships the plan alongside the code as `PLAN.md`, and **verifies the result installs and passes its own tests in a fresh venv**. Unsupported stacks fall back to a generic scaffold (`PLAN.md` + `README.md`, no build/test step) rather than forcing the plan into a template that doesn't fit. This is the deterministic half of the eval harness — the check that a generated repo *builds and its tests pass*.
 - **Eval harness as a CI gate** — the scaffolder's `build_and_test()` check (which creates a fresh venv, installs the generated repo, and runs its tests) is now wired into GitHub Actions. Every push runs the same deterministic check in CI: if a generated repo cannot install or pass its own tests, the build fails. No model calls, no subjective grading — the proof is reproducible and offline.
 
 ## Roadmap
@@ -57,6 +59,7 @@ Live paths (planner, real adapter) authenticate from the environment (`ANTHROPIC
 
 ## Honest limitations (today)
 
+- Only the Anthropic adapter is implemented; **Ollama is stubbed but not yet added** — `--adapter ollama` is not currently usable.
 - Only one scaffold target exists (Python CLI); other stacks get an honest "unsupported" plan + manual checklist, determined by a **keyword heuristic** on the recommended stack.
 - The planner's budget is a **soft, forward-looking cap** — it bounds the next round, not the current one, so usage can overshoot by up to a turn.
 - The planner resends its instruction each round; **prompt caching** is a future optimization, not yet applied.
