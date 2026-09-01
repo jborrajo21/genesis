@@ -4,14 +4,17 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from genesis.anthropic_adapter import SUPPORTED_MODELS as ANTHROPIC_MODELS
+from genesis.adapter import ModelAdapter
 from genesis.anthropic_adapter import AnthropicAdapter
 from genesis.interface import (
+    _confirm_overwrite,
     _get_idea,
     _get_json_path,
     _get_output_dir,
+    _get_save_path,
     _select_adapter,
     _select_model,
+    answer_fn,
     print_error,
     print_progress,
     print_success,
@@ -19,7 +22,24 @@ from genesis.interface import (
 from genesis.planner import Plan, Planner, PlannerError, _parse_plan
 from genesis.scaffolder import build_and_test, scaffold
 
-# from genesis.ollama_adapter import SUPPORTED_MODELS as OLLAMA_MODELS
+
+def _build_adapter(adapter_str: str, model: str, max_tokens: int) -> ModelAdapter:
+    """Map an adapter name to a live adapter. Raises ValueError on unknown name or missing SDK."""
+    if adapter_str == "anthropic":
+        try:
+            return AnthropicAdapter(model=model, max_tokens=max_tokens)
+        except ImportError:
+            raise ValueError(
+                "Anthropic SDK not installed. Install with: pip install 'genesis[anthropic]'"
+            )
+    # Need to create OllamaAdapter
+    # elif adapter_str == "ollama"
+    #     try:
+    #         return OllamaAdapter(model=model)
+    #     except ConnectionError:
+    #         raise ValueError("Ollama not found at localhost:11434. Run: ollama serve")
+    else:
+        raise ValueError(f"Unknown adapter: {adapter_str}")
 
 
 def _create_plan(
@@ -35,28 +55,7 @@ def _create_plan(
     if model is None:
         model = _select_model(adapter_str)
 
-    valid_models = {
-        "anthropic": ANTHROPIC_MODELS,
-        # "ollama": OLLAMA_MODELS,
-    }
-    if model not in valid_models.get(adapter_str, []):
-        raise ValueError(f"Unknown model '{model}' for adapter '{adapter_str}'")
-
-    if adapter_str == "anthropic":
-        try:
-            adapter = AnthropicAdapter(model=model, max_tokens=max_tokens)
-        except ImportError:
-            raise ValueError(
-                "Anthropic SDK not installed. Install with: pip install 'genesis[anthropic]'"
-            )
-    # Need to create OllamaAdapter
-    # elif adapter_str == "ollama"
-    #     try:
-    #         adapter = OllamaAdapter(model=model)
-    #     except ConnectionError:
-    #         raise ValueError("Ollama not found at localhost:11434. Run: ollama serve")
-    else:
-        raise ValueError(f"Unknown adapter: {adapter_str}")
+    adapter = _build_adapter(adapter_str, model, max_tokens)
 
     planner = Planner(adapter)
     return planner.plan(idea=idea, max_rounds=max_rounds, answer_fn=answer_fn)
@@ -86,8 +85,7 @@ def cmd_plan(
                 f.write(plan_json)
             print_success(f"Plan saved to {output_path}")
         elif sys.stdin.isatty():
-            print("\nSave this plan to a file?")
-            save = input("Path (leave blank to print instead) → ").strip()
+            save = _get_save_path()
             if save:
                 with open(save, "w") as f:
                     f.write(plan_json)
@@ -113,15 +111,11 @@ def cmd_plan(
         return 1
 
 
-def cmd_scaffold(plan_json: str | None, output_dir: str | None, force: bool) -> int:
+def cmd_scaffold(plan_json: str, output_dir: str | None, force: bool) -> int:
     """Scaffold a plan and return exit code."""
     try:
         if output_dir is None:
             output_dir = _get_output_dir()
-        if plan_json is None:
-            plan_json = _get_json_path()
-        else:
-            plan_json = Path(plan_json).read_text()
         print_progress("Scaffolding")
         plan_data = json.loads(plan_json)
         plan = _parse_plan(plan_data)
@@ -158,6 +152,18 @@ def cmd_scaffold(plan_json: str | None, output_dir: str | None, force: bool) -> 
         return 1
 
 
+def cmd_scaffold_file(plan_path: str | None, output_dir: str | None, force: bool) -> int:
+    """Read a plan from a path (prompting if absent), then scaffold it."""
+    try:
+        if plan_path is None:
+            plan_path = _get_json_path()
+        plan_json = Path(plan_path).read_text()
+    except OSError as e:
+        print_error(f"Could not read plan file: {e}")
+        return 1
+    return cmd_scaffold(plan_json, output_dir, force)
+
+
 def cmd_create(
     idea: str | None,
     output_dir: str | None,
@@ -186,9 +192,7 @@ def cmd_create(
 
         target = Path(output_dir)
         if target.exists():
-            print(f"\n{output_dir} already exists.")
-            overwrite = input("Overwrite? (y/n) → ").strip().lower()
-            if overwrite != "y":
+            if not _confirm_overwrite(output_dir):
                 print_error("Cancelled.")
                 return 1
             force = True
@@ -206,13 +210,3 @@ def cmd_create(
     except Exception as e:
         print_error(f"Unexpected error: {e}")
         return 1
-
-
-def answer_fn(questions: list[str]) -> list[str]:
-    """Prompt user for answers to clarifying questions."""
-    answers = []
-    for i, q in enumerate(questions, 1):
-        print(f"\n[Q{i}/{len(questions)}] {q}")
-        answer = input("→ ").strip()
-        answers.append(answer)
-    return answers

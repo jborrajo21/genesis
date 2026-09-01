@@ -1,7 +1,7 @@
 import argparse
 from importlib.metadata import version
 
-from genesis.core import cmd_create, cmd_plan, cmd_scaffold
+from genesis.core import cmd_create, cmd_plan, cmd_scaffold_file
 
 
 def main(argv=None):
@@ -55,7 +55,7 @@ def main(argv=None):
         )
 
     if args.command == "scaffold":
-        return cmd_scaffold(args.plan_json, args.output_dir, args.force)
+        return cmd_scaffold_file(args.plan_json, args.output_dir, args.force)
 
     if args.command == "create":
         return cmd_create(

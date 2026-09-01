@@ -348,3 +348,84 @@ the core import path; only code that has opted into the extra may import it.
 - **Reason:** Ollama doesn't report token counts in its responses and estimation is unreliable. Users choosing Ollama accept "free local" means "no token tracking." The `max_turns` guardrail still works (structural iteration cap), but the `token_budget` cap is disabled by always reporting 0 usage. This is an honest trade-off: free local execution vs cost visibility. Documented in README as a limitation.
 - **Scope:** adapter implementation
 - **Eval hook:** `OllamaAdapter.complete(...)` returns `Completion` with `usage=0`; a loop with Ollama respects `max_turns` but ignores `token_budget`
+## D-038: Truncation is a first-class stop reason on the adapter Protocol
+
+- **Options:** let the planner fail on the resulting JSON parse error · have each adapter raise its own truncation exception · add a provider-neutral `StopReason` enum to `Completion` and map it in each adapter
+- **Choice:** `StopReason{DONE, TRUNCATED, TOOL_USE, OTHER}` on `Completion`; `AnthropicAdapter` maps the provider's `stop_reason` string through `_STOP_REASON_MAP`.
+- **Reason:** "the model ran out of output tokens" is a fact every provider reports and every caller needs, so it belongs on the Protocol (D-012), not in provider-specific exception types that would leak the provider back into the planner. An enum keeps the mapping total: unknown provider strings collapse to `OTHER` rather than crashing on a new API value. Cost accepted: every future adapter must supply a mapping, and Ollama's will be approximate.
+- **Scope:** adapter interface
+- **Eval hook:** `Completion(text="x").stop_reason is StopReason.DONE` (the default); an Anthropic response with `stop_reason="max_tokens"` yields `StopReason.TRUNCATED`
+
+## D-039: The planner fails fast on truncation instead of parsing a partial response
+
+- **Options:** attempt to salvage the partial JSON · silently retry with a larger budget · raise `PlannerError` naming the fix
+- **Choice:** `Planner._round` raises `PlannerError("response was truncated by max_tokens — increase --max-tokens and try again")` before attempting `_extract_json`.
+- **Reason:** a truncated plan is not a recoverable parse problem — the tail is simply absent, so salvage produces a plausible-looking plan that is missing phases, which is worse than an error. Silent retry would spend the user's tokens twice without consent and hide a mis-set budget. Naming `--max-tokens` in the message makes the failure self-servicing. Cost accepted: a user who hits the cap loses the round's spend and must re-run.
+- **Scope:** planner behaviour
+- **Eval hook:** a `FakeAdapter` returning `Completion(text="{partial", stop_reason=StopReason.TRUNCATED)` makes `Planner.plan()` raise `PlannerError` mentioning `--max-tokens`, not `json.JSONDecodeError`
+
+## D-040: Unsupported stacks get a generic scaffold, not a forced template render
+
+- **Options:** refuse to scaffold and exit non-zero · render the Python CLI template anyway and let the user delete it · write a docs-only directory (`PLAN.md` + `README.md`) with no build step
+- **Choice:** `scaffold()` branches on `plan.supported` and delegates to `_scaffold_generic()`, which writes `PLAN.md` and a `README.md` explaining that no code was generated for this stack.
+- **Reason:** this is the honesty behaviour the project committed to (`genesis-plan.md`) made real in code — the user gets the plan they paid tokens for plus an explicit statement of the limitation, rather than either nothing or a Python skeleton for their Rust project. Skipping `build_and_test()` on this path keeps the eval gate meaningful: the harness only ever claims "builds and passes tests" about repos it actually built and tested.
+- **Scope:** scaffolder behaviour
+- **Eval hook:** `scaffold(plan_with_supported_false, tmp)` produces exactly `PLAN.md` and `README.md`, no `pyproject.toml`; `cmd_scaffold` returns 0 without invoking `build_and_test`
+
+## D-041: Each adapter module owns its `SUPPORTED_MODELS` list, with a custom-name escape hatch
+
+- **Options:** a central model registry in `core.py` · hard-code model names in the CLI · a `SUPPORTED_MODELS` constant per adapter module, plus a free-text option in the picker
+- **Choice:** `SUPPORTED_MODELS` lives beside the adapter that can serve those models; `_select_model` renders it as a numbered menu and offers a final "enter custom model name" entry.
+- **Reason:** a central registry would have to be edited every time any provider ships a model, re-coupling the CLI to provider specifics that D-012 pushed behind the Protocol. Keeping the list in the adapter module means adding a provider is one new file. The escape hatch exists because the curated list goes stale between releases and a hard-coded menu would make a brand-new model unreachable without a Genesis upgrade. Cost accepted: `_create_plan` validates against the list, so a custom name typed at the menu is passed to the provider unvalidated and fails at the API boundary instead of the CLI boundary.
+- **Superseded in part by D-047.** As first written, `_create_plan` validated the chosen model against `SUPPORTED_MODELS` and rejected anything outside it, which made the custom-name option unreachable — the cost described above was not actually the behaviour. D-047 removes that validation and makes the list a menu, as this entry always intended.
+- **Scope:** adapter + CLI interface
+- **Eval hook:** `from genesis.anthropic_adapter import SUPPORTED_MODELS` succeeds and `core.py` imports no model names of its own; selecting the last menu index prompts for a free-text model name
+
+## D-042: Missing CLI arguments are prompted for interactively; tuning knobs stay flag-only
+
+- **Options:** require every argument as a flag and error out when absent · prompt for everything · make positionals optional and prompt only for what a run cannot proceed without, leaving tuning knobs flag-only with defaults
+- **Choice:** `idea`, `output_dir`, `plan_json`, `--adapter` and `--model` are prompted for when omitted; `--max-rounds` (6) and `--max-tokens` (10000) are flag-only with defaults and are never prompted for.
+- **Reason:** the two audiences pull in opposite directions — a first-time user typing `genesis create` should be walked through it, while a scripted run needs every value settable non-interactively. Optional positionals satisfy both from one code path. The line between the two groups is whether a sensible default exists: there is no default project idea, but there is a defensible default round and token budget, and prompting for numbers a user has no basis to choose is friction, not help. Cost accepted: a non-interactive run that omits a required value blocks on `input()` against a closed stdin instead of printing a usage error.
+- **Scope:** CLI interface
+- **Eval hook:** `genesis plan --help` shows `idea` as optional and `--max-rounds`/`--max-tokens` with defaults; `genesis plan` with no arguments in a terminal prompts for the idea
+
+## D-043: Presentation is extracted to `genesis/interface.py` (partially)
+
+- **Options:** leave `print`/`input` inline in `core.py` · adopt a TUI library (rich, textual) · extract a stdlib-only presentation module
+- **Choice:** `genesis/interface.py` holds `print_progress/print_success/print_error` and the `_get_*`/`_select_*` prompts; `core.py` imports them and holds command logic.
+- **Reason:** the `cmd_*` functions are the units worth testing, and inline `input()` makes them untestable without stdin mocking — which Phase 7 explicitly declined to do. One presentation module is the seam that lets those tests stub prompting instead. A TUI library was rejected on the same grounds as D-034: it would add a runtime dependency inherited by anyone importing Genesis as a library, for output that plain `print` already produces.
+- **Gap closed by D-045.** The extraction was initially incomplete: three `input()` calls remained in `core.py` (the save-path prompt, the overwrite confirmation, and `answer_fn`), leaving `cmd_plan`, `cmd_create` and the planner answer callback unstubbable through `interface`. D-045 states the boundary rule and finishes the move.
+- **Scope:** CLI implementation
+- **Eval hook:** `grep -c "input(" src/genesis/core.py` returns 3 today; the seam is complete when it returns 0 and every prompt is reachable through `genesis.interface`
+
+## D-044: `cmd_scaffold`'s plan parameter means content, not a path
+
+- **Options:** the parameter is a filesystem path and `cmd_create` writes a temp file to hand one over · the parameter is plan JSON text and path resolution happens at the CLI edge · accept either and sniff which one was passed
+- **Choice:** `cmd_scaffold(plan_json: str, ...)` takes plan JSON **text** and never touches the filesystem. A sibling `cmd_scaffold_file(plan_path: str | None, ...)` owns "get me the text" — it prompts when the path is absent, reads the file, and delegates. `cli.py` dispatches `scaffold` to `cmd_scaffold_file`; `cmd_create` calls `cmd_scaffold` directly with the JSON it already holds.
+- **Reason:** the parameter previously meant *path* for one caller and *content* for the other, so `genesis create` passed a JSON string to `Path(...).read_text()` and failed on every invocation — the floor deliverable of the CLI block was broken in the only code path that had two callers. One meaning per parameter is what prevents that class of drift, and content is the right meaning because it makes `cmd_scaffold` testable with no filesystem, which the CLI test task depends on. Sniffing was rejected outright: guessing whether a string is a path or JSON is how the ambiguity arose. Cost accepted: two entry points where there was one, and `cmd_create` cannot reuse the path-reading error handling.
+- **Scope:** CLI implementation
+- **Eval hook:** `cmd_scaffold(json_text, out, force)` returns 0 and writes the repo; `cmd_scaffold_file("missing.json", out, force)` returns 1 printing `Could not read plan file:` (not `Unexpected error`); `genesis create` scaffolds end-to-end
+
+## D-045: The `interface` / `core` boundary is presentation vs filesystem
+
+- **Options:** move all I/O out of `core.py` into `interface.py` · leave the remaining prompts inline and test around them by always passing arguments · split on presentation vs filesystem — `interface` owns human interaction, `core` owns files
+- **Choice:** `interface.py` owns everything that talks to a human (`input()` and message `print()`) and never touches the filesystem; `core.py` keeps every `open(...)`. `answer_fn`, `_get_save_path` and `_confirm_overwrite` moved to `interface`; the `open(...)` writes and the plan's stdout emission stayed in `core`.
+- **Reason:** "move all I/O" is the rule that produced the `_get_json_path` defect — a presentation helper doing a file read, whose name then lied about its return type (see D-044). Splitting on *who the code talks to* keeps each module's name honest. The constraint driving the move is testability: `cmd_plan` and `cmd_create` were unstubbable while they called `input()` directly, and the CLI test task needs to drive them without stdin. `print(plan_json)` deliberately stayed in `core` — it is the command's machine-parseable stdout contract, not a message, and routing it through a presentation helper invites a decorative prefix that would break callers piping `genesis plan` into `jq`. Cost accepted: `core.py:149`'s build-log dump to stderr is still an inline `print`, an acknowledged exception on the grounds that it is a log dump rather than a message.
+- **Scope:** CLI implementation
+- **Eval hook:** `grep -c "input(" src/genesis/core.py` returns 0; `grep -c "open(" src/genesis/interface.py` returns 0
+
+## D-046: Adapter construction is a seam — `_build_adapter`
+
+- **Options:** keep constructing `AnthropicAdapter` inline in `_create_plan` and monkeypatch the class in tests · extract `_build_adapter(adapter_str, model, max_tokens) -> ModelAdapter` · add an `adapter=None` injection parameter to `_create_plan`
+- **Choice:** `_build_adapter` in `core.py` owns the name → live adapter mapping and is the only place that names a concrete adapter class; `_create_plan` resolves choices, calls it, and plans.
+- **Reason:** `_create_plan` had no seam, so no test could reach it without a network call and a real API key — blocking the CLI test task entirely. Patching the concrete class in each test was rejected because every test would then have to know which provider class is current, and would break the moment a second adapter lands. An injection parameter was rejected for putting a test-only argument in a production signature. The decisive reason is not testing, though: "which adapter does this string mean" was smeared across `core.py` and `interface.py` as commented-out fragments in three files, so adding a provider meant finding all of them. One function makes that a one-branch edit. Cost accepted: one more indirection between the CLI and the adapter.
+- **Scope:** CLI implementation
+- **Eval hook:** `_build_adapter("anthropic", m, n)` returns an `AnthropicAdapter`; `_build_adapter("nope", m, n)` raises `ValueError("Unknown adapter: nope")`; `grep -c AnthropicAdapter src/genesis/core.py` counts only the import and the one construction site
+
+## D-047: `SUPPORTED_MODELS` is a menu, not a whitelist
+
+- **Options:** validate the model against `SUPPORTED_MODELS` and reject anything outside it (deleting the custom-name menu option) · drop the validation and let the provider reject unknown models · validate only values that came from the menu
+- **Choice:** no model validation in Genesis. `_create_plan`'s `valid_models` block is deleted; any model name — menu-chosen, `--model`-supplied, or free-typed — is passed to the adapter.
+- **Reason:** the curated list goes stale between Genesis releases, so a whitelist makes a model the provider ships tomorrow unreachable until Genesis is upgraded — the opposite of the model-agnostic seam D-012 exists to provide. The provider already rejects unknown model names with a clear error, so Genesis validating too was duplicated authority with a shorter shelf life. Provenance-tracking (validating only menu values) was rejected as complexity for no gain. Cost accepted: a typo'd `--model` now costs an API round trip and surfaces the provider's error text rather than failing instantly at the CLI boundary; `core.py` no longer names any model, which is the intended consequence.
+- **Scope:** CLI interface
+- **Eval hook:** `_build_adapter("anthropic", "some-future-model-9", 500)` constructs an adapter rather than raising; `grep -c ANTHROPIC_MODELS src/genesis/core.py` returns 0 while `interface.py` still imports it for the menu

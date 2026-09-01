@@ -1,9 +1,18 @@
 import sys
-from pathlib import Path
 
 from genesis.anthropic_adapter import SUPPORTED_MODELS as ANTHROPIC_MODELS
 
 # from genesis.ollama_adapter import SUPPORTED_MODELS as OLLAMA_MODELS
+
+
+def answer_fn(questions: list[str]) -> list[str]:
+    """Prompt user for answers to clarifying questions."""
+    answers = []
+    for i, q in enumerate(questions, 1):
+        print(f"\n[Q{i}/{len(questions)}] {q}")
+        answer = input("→ ").strip()
+        answers.append(answer)
+    return answers
 
 
 def print_progress(msg: str) -> None:
@@ -21,6 +30,12 @@ def print_error(msg: str) -> None:
     print(f"✗ {msg}", file=sys.stderr)
 
 
+def _confirm_overwrite(path: str) -> bool:
+    """Prompt user for overwrite confirmation."""
+    print(f"\n{path} already exists.")
+    return input("Overwrite? (y/n) → ").strip().lower() == "y"
+
+
 def _get_idea() -> str:
     """Prompt for idea if not provided."""
     print("\nWhat's your project idea?")
@@ -36,7 +51,13 @@ def _get_output_dir() -> str:
 def _get_json_path() -> str:
     """Prompt for plan json file path if not provided."""
     print("\nEnter your json plan's path?")
-    return Path(input("→ ").strip()).read_text()
+    return input("→ ").strip()
+
+
+def _get_save_path() -> str:
+    """Prompt for save path."""
+    print("\nSave this plan to a file?")
+    return input("Path (leave blank to print instead) → ").strip()
 
 
 def _select_adapter() -> str:
