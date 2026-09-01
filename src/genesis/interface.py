@@ -1,8 +1,7 @@
 import sys
 
 from genesis.anthropic_adapter import SUPPORTED_MODELS as ANTHROPIC_MODELS
-
-# from genesis.ollama_adapter import SUPPORTED_MODELS as OLLAMA_MODELS
+from genesis.ollama_adapter import SUPPORTED_MODELS as OLLAMA_MODELS
 
 
 def answer_fn(questions: list[str]) -> list[str]:
@@ -78,8 +77,8 @@ def _select_model(adapter: str) -> str:
     """Prompt user to select model if not provided."""
     if adapter == "anthropic":
         models = ANTHROPIC_MODELS
-    # elif adapter == "ollama":
-    # models = OLLAMA_MODELS
+    elif adapter == "ollama":
+        models = OLLAMA_MODELS
     else:
         raise ValueError(f"Unknown adapter: {adapter}")
 

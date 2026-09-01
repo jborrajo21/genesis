@@ -341,13 +341,15 @@ the core import path; only code that has opted into the extra may import it.
 - **Scope:** adapter implementation
 - **Eval hook:** `OllamaAdapter.complete([...], tools=[...])` returns a `Completion` with `tool_calls=[]` (not an exception); the same call without tools returns text normally
 
-## D-037: Token counting for Ollama — track 0 / no budget enforcement
+## D-037: Token counting for Ollama — read usage when the endpoint reports it
 
-- **Options:** estimate tokens from prompt/response length vs track 0 (no budget enforcement) vs try to infer from Ollama API
-- **Choice:** `OllamaAdapter.complete()` returns `Completion.usage = 0` always. Cost cap guardrails become a no-op with Ollama.
-- **Reason:** Ollama doesn't report token counts in its responses and estimation is unreliable. Users choosing Ollama accept "free local" means "no token tracking." The `max_turns` guardrail still works (structural iteration cap), but the `token_budget` cap is disabled by always reporting 0 usage. This is an honest trade-off: free local execution vs cost visibility. Documented in README as a limitation.
+- **Options:** estimate tokens from prompt/response length · always report 0 and disable the budget guardrail · read the `usage` block the OpenAI-compatible endpoint returns, falling back to `None`
+- **Choice:** `OllamaAdapter.complete()` reads `body["usage"]["total_tokens"]` and passes it through as `Completion.usage`, or `None` when the endpoint omits it. The `token_budget` guardrail works with Ollama exactly as it does with Anthropic.
+- **Reason:** D-035 put the adapter on the OpenAI-compatible `/v1/chat/completions` endpoint, which returns a standard `usage` block (`prompt_tokens`/`completion_tokens`/`total_tokens`). Reporting 0 would discard data the server already sends and would silently disable a guardrail for no gain. Reading defensively (`.get`, falling back to `None`) costs nothing if a given Ollama build omits the block, and `None` is already the `Completion.usage` type's "unknown" value, so callers need no Ollama-specific branch. Estimation was rejected outright: a wrong number in a budget guardrail is worse than an honest absent one.
+- **Revised Sept 1, 2026.** As first written this entry chose `usage = 0` always, on the stated ground that "Ollama doesn't report token counts." That is true of Ollama's *native* `/api/chat` (which reports `prompt_eval_count`/`eval_count`) but not of the `/v1` endpoint D-035 selected in the same session — the two entries were written against different assumptions about which API the adapter would call, and this one was wrong. Writing the adapter surfaced the conflict.
 - **Scope:** adapter implementation
-- **Eval hook:** `OllamaAdapter.complete(...)` returns `Completion` with `usage=0`; a loop with Ollama respects `max_turns` but ignores `token_budget`
+- **Eval hook:** with Ollama running, `OllamaAdapter(model=m).complete([...]).usage` is a positive int; against a stubbed response with no `usage` key it is `None`, and neither case raises
+
 ## D-038: Truncation is a first-class stop reason on the adapter Protocol
 
 - **Options:** let the planner fail on the resulting JSON parse error · have each adapter raise its own truncation exception · add a provider-neutral `StopReason` enum to `Completion` and map it in each adapter

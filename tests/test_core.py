@@ -7,6 +7,7 @@ from genesis.anthropic_adapter import SUPPORTED_MODELS
 from genesis.core import _create_plan, cmd_create, cmd_plan, cmd_scaffold, cmd_scaffold_file
 from genesis.fakes import FakeAdapter
 from genesis.interface import _select_adapter, _select_model
+from genesis.ollama_adapter import SUPPORTED_MODELS as OLLAMA_MODELS
 
 PY = ["Python 3.11"]
 RUST = ["Rust", "clap"]
@@ -142,7 +143,12 @@ def test_select_model_accepts_custom_name(monkeypatch):
 
 def test_select_model_rejects_unknown_adapter():
     with pytest.raises(ValueError):
-        _select_model("ollama")
+        _select_model("openai")
+
+
+def test_select_model_offers_ollama_models(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda *a: "1")
+    assert _select_model("ollama") == OLLAMA_MODELS[0]
 
 
 @pytest.mark.slow
@@ -150,3 +156,29 @@ def test_cmd_scaffold_supported_plan_builds(tmp_path):
     out = tmp_path / "gen"
     assert cmd_scaffold(json.dumps(_plan(PY)), str(out), False) == 0
     assert (out / "pyproject.toml").exists()
+
+
+def test_cmd_plan_reports_unreachable_server(monkeypatch, capsys):
+    def boom(*a, **k):
+        raise ConnectionError("Could not reach Ollama at http://x. Run: ollama serve")
+
+    monkeypatch.setattr(
+        "genesis.core._build_adapter", lambda *a, **k: type("A", (), {"complete": boom})()
+    )
+    assert cmd_plan("idea", "ollama", "m", None, 6, 10000) == 1
+    err = capsys.readouterr().err
+    assert "ollama serve" in err
+    assert "Could not write output" not in err
+
+
+def test_cmd_create_reports_unreachable_server(monkeypatch, capsys, tmp_path):
+    def boom(*a, **k):
+        raise ConnectionError("Could not reach Ollama at http://x. Run: ollama serve")
+
+    monkeypatch.setattr(
+        "genesis.core._build_adapter", lambda *a, **k: type("A", (), {"complete": boom})()
+    )
+    assert cmd_create("idea", str(tmp_path / "gen"), "ollama", "m", None, False, 6, 10000) == 1
+    err = capsys.readouterr().err
+    assert "ollama serve" in err
+    assert "Could not write output" not in err

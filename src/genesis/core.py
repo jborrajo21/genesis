@@ -19,6 +19,7 @@ from genesis.interface import (
     print_progress,
     print_success,
 )
+from genesis.ollama_adapter import OllamaAdapter
 from genesis.planner import Plan, Planner, PlannerError, _parse_plan
 from genesis.scaffolder import build_and_test, scaffold
 
@@ -32,12 +33,8 @@ def _build_adapter(adapter_str: str, model: str, max_tokens: int) -> ModelAdapte
             raise ValueError(
                 "Anthropic SDK not installed. Install with: pip install 'genesis[anthropic]'"
             )
-    # Need to create OllamaAdapter
-    # elif adapter_str == "ollama"
-    #     try:
-    #         return OllamaAdapter(model=model)
-    #     except ConnectionError:
-    #         raise ValueError("Ollama not found at localhost:11434. Run: ollama serve")
+    if adapter_str == "ollama":
+        return OllamaAdapter(model=model, max_tokens=max_tokens)
     else:
         raise ValueError(f"Unknown adapter: {adapter_str}")
 
@@ -102,6 +99,9 @@ def cmd_plan(
         return 1
     except PlannerError as e:
         print_error(f"Planning failed: {e}")
+        return 1
+    except ConnectionError as e:
+        print_error(str(e))
         return 1
     except OSError as e:
         print_error(f"Could not write output: {e}")
@@ -203,6 +203,9 @@ def cmd_create(
         return 1
     except PlannerError as e:
         print_error(f"Planning failed: {e}")
+        return 1
+    except ConnectionError as e:
+        print_error(str(e))
         return 1
     except OSError as e:
         print_error(f"Could not write output: {e}")
