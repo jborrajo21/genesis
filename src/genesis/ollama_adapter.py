@@ -31,7 +31,12 @@ class OllamaAdapter:
         self._url = f"{base_url.rstrip('/')}/chat/completions"
         self._timeout = timeout
 
-    def complete(self, messages: list[Message], tools: list[ToolDef] | None = None) -> Completion:
+    def complete(
+        self,
+        messages: list[Message],
+        tools: list[ToolDef] | None = None,
+        response_schema: dict | None = None,
+    ) -> Completion:
         """Complete a conversation. Tools are accepted but never sent or returned (D-036)."""
         payload = {
             "model": self._model,
@@ -39,6 +44,11 @@ class OllamaAdapter:
             "stream": False,
             "max_tokens": self._max_tokens,
         }
+        if response_schema:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "response", "schema": response_schema},
+            }
         request = urllib.request.Request(
             self._url,
             data=json.dumps(payload).encode(),

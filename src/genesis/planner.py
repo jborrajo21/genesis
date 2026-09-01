@@ -41,6 +41,36 @@ Make phases sequential and each step concrete and actionable — a developer sho
 exactly what to do. Do not include a "supported" field; that is determined elsewhere.
 """
 
+_PLAN_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "status": {"type": "string"},
+        "questions": {"type": "array", "items": {"type": "string"}},
+        "plan": {
+            "type": "object",
+            "properties": {
+                "project_name": {"type": "string"},
+                "summary": {"type": "string"},
+                "stack": {"type": "array", "items": {"type": "string"}},
+                "phases": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "steps": {"type": "array", "items": {"type": "string"}},
+                        },
+                        "required": ["name", "steps"],
+                    },
+                },
+                "manual_checklist": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["project_name", "summary", "stack", "phases"],
+        },
+    },
+    "required": ["status"],
+}
+
 
 @dataclass
 class Phase:
@@ -121,7 +151,7 @@ class Planner:
 
     def _round(self, conversation: list[Message]) -> RoundResult:
         messages = [Message(role="system", content=_PLANNING_INSTRUCTION)] + conversation
-        completion = self._adapter.complete(messages)
+        completion = self._adapter.complete(messages, response_schema=_PLAN_SCHEMA)
         if completion.stop_reason is StopReason.TRUNCATED:
             raise PlannerError(
                 "response was truncated by max_tokens — increase --max-tokens and try again"

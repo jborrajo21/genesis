@@ -19,7 +19,12 @@ class AnthropicAdapter:
         self._model = model
         self._max_tokens = max_tokens
 
-    def complete(self, messages: list[Message], tools: list[ToolDef] | None = None) -> Completion:
+    def complete(
+        self,
+        messages: list[Message],
+        tools: list[ToolDef] | None = None,
+        response_schema: dict | None = None,
+    ) -> Completion:
         has_system = messages[0].role == "system"
         system = messages[0].content if has_system else None
         convo = messages[1:] if has_system else messages

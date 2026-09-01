@@ -152,3 +152,20 @@ def test_max_tokens_is_sent(monkeypatch):
     _patch(monkeypatch, _body(), captured)
     OllamaAdapter(model="m", max_tokens=4096).complete([Message(role="user", content="hi")])
     assert json.loads(captured["request"].data)["max_tokens"] == 4096
+
+
+def test_response_schema_is_forwarded(monkeypatch):
+    captured = {}
+    _patch(monkeypatch, _body(), captured)
+    schema = {"type": "object", "properties": {"a": {"type": "string"}}}
+    OllamaAdapter(model="m").complete([Message(role="user", content="hi")], response_schema=schema)
+    fmt = json.loads(captured["request"].data)["response_format"]
+    assert fmt["type"] == "json_schema"
+    assert fmt["json_schema"]["schema"] == schema
+
+
+def test_no_response_format_without_schema(monkeypatch):
+    captured = {}
+    _patch(monkeypatch, _body(), captured)
+    OllamaAdapter(model="m").complete([Message(role="user", content="hi")])
+    assert "response_format" not in json.loads(captured["request"].data)

@@ -42,5 +42,8 @@ class Completion:
 
 class ModelAdapter(Protocol):
     def complete(
-        self, messages: list[Message], tools: list[ToolDef] | None = None
+        self,
+        messages: list[Message],
+        tools: list[ToolDef] | None = None,
+        response_schema: dict | None = None,
     ) -> Completion: ...
