@@ -4,15 +4,17 @@ An AI agent that turns a project idea into a **structured, buildable plan** and 
 
 ![CI](https://github.com/jborrajo21/genesis/actions/workflows/ci.yml/badge.svg)
 
-> **Status: in active development.** Blocks 1–6 of 8 are built, plus a user-facing CLI and a second (local, free) model backend. The live deploy is **scheduled, not skipped** — deferred to late Oct / Nov so the hosted URL is funded and alive when it matters, rather than lapsing after a month (D-050). See the [roadmap](#roadmap).
+> **Status: in active development.** Blocks 1–6 of 8 are built, plus a user-facing CLI, a second (local, free) model backend, and a three-tier eval harness measured across three models ([results](#eval-numbers)). The live deploy is **scheduled, not skipped** — deferred to late Oct / Nov so the hosted URL is funded and alive when it matters, rather than lapsing after a month (D-050). See the [roadmap](#roadmap).
 
 ## What it is
 
-Genesis takes a project idea, asks the clarifying questions that would most change the outcome, and produces a typed, phased plan good enough for an AI to build from — while being **honest about what it can't scaffold**. It's deliberately framed as a scaffolding agent with engineering discipline, not an LLM wrapper: the two things that make it worth anything are the deterministic eval harness (now a live CI gate) and a live deploy.
+Genesis takes a project idea, asks the clarifying questions that would most change the outcome, and produces a typed, phased plan good enough for an AI to build from — while being **honest about what it can't scaffold**.
+
+Most of Genesis is not the model call. The scaffolder runs with no LLM in the loop and is gated in CI on every push. The planner's output contract is enforced by a JSON schema. Where the pipeline succeeds and fails is **measured across three models and written down**, including the results that were inconvenient. Every non-trivial choice is in a decision log with the constraint that drove it.
 
 ```
 idea → clarifying questions → structured Plan → scaffolded repo (installs + tests pass)
-                                    ↑ made a CI gate by the deterministic eval harness (Block 6)
+                                    ↑ gated in CI by the deterministic eval harness
 ```
 
 ## Quick start
@@ -33,7 +35,7 @@ Two backends, same commands:
 | Invoke | `genesis create "idea" ./out` | `genesis create "idea" ./out --adapter ollama --model <your-model>` |
 | Cost | tokens | free |
 | Needs network | yes | no |
-| Plan quality | higher | depends on the local model |
+| Plan quality | deeper plans (≈30 steps) | thinner (≈14 steps) — but **higher end-to-end success**, see [eval numbers](#eval-numbers) |
 
 Or run the steps separately — `genesis plan "idea" --output plan.json`, then
 `genesis scaffold plan.json ./out`. `scaffold` takes any valid plan JSON, including one you wrote
@@ -142,17 +144,31 @@ names the command to run.
 ## Built so far
 
 - **CLI** — three subcommands: `plan` (idea → plan JSON, printed to stdout or saved with `--output`, with an interactive save prompt when run in a terminal without the flag), `scaffold` (a plan JSON file → repo, with `--force` to overwrite an existing directory), and `create` (plan + scaffold end-to-end, prompting before overwriting an existing output directory). Idea, output directory, adapter, and model are prompted for interactively when not passed as arguments; `--max-rounds` (default 6) and `--max-tokens` (default 10000) are flag-only, since their defaults cover the common case.
-- **Python CLI template** — a minimal, correct reference repo (packaging, tests, lint, CI) that the scaffolder will later generate. Hand-built first, so its generated output can be evaluated against something understood line-by-line.
+- **Python CLI template** — a minimal, correct reference repo (packaging, tests, lint, CI) that the scaffolder renders. Hand-built first, so its generated output is evaluated against something understood line-by-line.
 - **Model-agnostic backend adapter** — a `ModelAdapter` Protocol that hides the provider behind a uniform `complete()` call, carrying tool definitions, a provider-neutral stop reason, and an optional response schema. **Two** adapters implement it: Anthropic (hosted) and Ollama (local). The rest of the system never imports a provider SDK, so models are swappable and everything is testable offline against a `FakeAdapter`.
-- **Ollama adapter — free, local, no API key** — talks to Ollama's OpenAI-compatible endpoint over stdlib `urllib`, adding no dependency. Planning runs entirely on your own machine at zero token cost. Small local models struggle to emit strictly-shaped JSON, so the planner sends a JSON schema and the adapter asks Ollama to constrain decoding to it — which is what makes local planning reliable rather than a coin flip.
+- **Ollama adapter — free, local, no API key** — talks to Ollama's OpenAI-compatible endpoint over stdlib `urllib`, adding no dependency. Planning runs entirely on your own machine at zero token cost. Small local models struggle to emit strictly-shaped JSON, so the planner sends a JSON schema and the adapter constrains decoding to it. That turned out to be decisive: in the eval, the schema-constrained local model produced valid plans **20/20**, beating both hosted models.
 - **Agent loop** — a hand-built tool-using loop (an LLM autonomously calling tools until done) with guardrails (`max_turns`, a token budget) and per-run telemetry (tools called, tokens, turns). Runs on the adapter Protocol, verified live and offline.
 - **Planner** — an adaptive, bounded loop that turns an idea into a typed `Plan`: it decides each round whether to ask more or plan, capped so it can never interrogate forever, with honest limitations (a stack it can't scaffold still gets a plan plus a manual checklist).
 - **Scaffolder** — a deterministic (no-LLM, no-network) renderer that turns a `Plan` into a real Python-CLI repo: it copies the vendored template, atomically renames the package across every coupled site, ships the plan alongside the code as `PLAN.md`, and **verifies the result installs and passes its own tests in a fresh venv**. Unsupported stacks fall back to a generic scaffold (`PLAN.md` + `README.md`, no build/test step) rather than forcing the plan into a template that doesn't fit. This is the deterministic half of the eval harness — the check that a generated repo *builds and its tests pass*.
-- **Eval harness as a CI gate** — the scaffolder's `build_and_test()` check (which creates a fresh venv, installs the generated repo, and runs its tests) is now wired into GitHub Actions. Every push runs the same deterministic check in CI: if a generated repo cannot install or pass its own tests, the build fails. No model calls, no subjective grading — the proof is reproducible and offline.
+- **Eval harness as a CI gate** — the scaffolder's `build_and_test()` check (which creates a fresh venv, installs the generated repo, and runs its tests) is wired into GitHub Actions. Every push runs the same deterministic check: if a generated repo cannot install or pass its own tests, the build fails. No model calls, no subjective grading — reproducible and offline.
+- **A three-tier eval** — deterministic CI gates, a measured pipeline success rate across a local 8B model, Haiku and Sonnet, and a structural rubric over the saved plans. Runs are persisted so they can be re-analysed without re-spending them. [The numbers, and what they don't say →](#eval-numbers)
 
 ## Eval numbers
 
-The eval harness asks one deterministic question, with no model in the loop: **does the rendered
+Genesis is evaluated in three tiers, because the questions are different kinds and cannot share a
+method. What gates CI must be deterministic and free; what measures a language model can be neither.
+Keeping those apart is the point — a flaky gate gets disabled, and a measurement that must be free
+stops measuring anything interesting.
+
+| Tier | What it asks | Determinism | Where it runs | Status |
+|---|---|---|---|---|
+| **1 — Gates** | Does the render produce a valid, installable, test-passing repo? Is it byte-identical run to run? Does the CLI fail gracefully on junk input? | Deterministic, no model, no network beyond `pip` | CI, every push | ✅ |
+| **2 — Pipeline success rate** | Across a set of diverse ideas, how many produce a schema-valid plan, get classified supported/unsupported correctly, and scaffold into a repo that builds green? At what token cost and latency — and how does that change as the model gets more capable? | Non-deterministic; a measurement, not a gate | On demand, with credentials | ✅ run Sept 2, 2026 |
+| **3 — Plan quality** | Are the plans any *good* — all fields present, phases sequential, steps concrete and actionable, no placeholder text? | Structural checks deterministic; judged quality is not | On demand, over saved Tier 2 output | ✅ structural half only |
+
+### Tier 1 — render correctness (the CI gate)
+
+Tier 1 asks one deterministic question, with no model in the loop: **does the rendered
 repo install and pass its own tests in a fresh venv?** No API key, no scoring, no judgement — it
 either builds or it doesn't.
 
@@ -180,18 +196,15 @@ describes; the plan contributes `PLAN.md` and a description string, nothing exec
 Two of these run on **every push** as a CI gate — if a rendered repo cannot install or pass its
 tests, the build fails. Reproduce locally with `pytest -m slow`.
 
-### The eval, in three tiers
+Tier 1 also gates two things the table above promises and this number doesn't cover, both in the
+fast suite:
 
-The number above answers one narrow question well. The wider question — *does an idea become a
-buildable project?* — needs more than one kind of check, and the kinds are not interchangeable.
-What gates CI must be deterministic and free; what measures the model cannot be either. Keeping
-those apart is the point.
-
-| Tier | What it asks | Determinism | Where it runs | Status |
-|---|---|---|---|---|
-| **1 — Gates** | Does the render produce a valid, installable, test-passing repo? Is it byte-identical run to run? Does the CLI fail gracefully on junk input? | Deterministic, no model, no network beyond `pip` | CI, every push | ✅ |
-| **2 — Pipeline success rate** | Across a set of diverse ideas, how many produce a schema-valid plan, get classified supported/unsupported correctly, and scaffold into a repo that builds green? At what token cost and latency — and how does that change as the model gets more capable? | Non-deterministic; a measurement, not a gate | On demand, with credentials | ✅ run Sept 2, 2026 |
-| **3 — Plan quality** | Are the plans any *good* — all fields present, phases sequential, steps concrete and actionable, no placeholder text? | Structural checks deterministic; judged quality is not | On demand, over saved Tier 2 output | ✅ structural half only |
+- **Determinism** — the same `Plan` rendered twice produces byte-identical output, and no cache
+  directories leak from the template into a generated repo. The README calls the scaffolder
+  deterministic; this is what backs the claim.
+- **Graceful degradation** — malformed plan JSON (missing keys, a top-level list, `null`, a
+  non-list `phases`) is rejected with an actionable message and no half-written directory, never a
+  traceback.
 
 ### Tier 2 — pipeline success rate
 
@@ -296,7 +309,7 @@ limitation of *this eval design*, not of the planner.
 Both surface as `model did not return valid JSON`, which blames the model for a defect that is
 sometimes ours. Splitting that message is on the fix list.
 
-#### Tier 3 — structural plan quality
+### Tier 3 — structural plan quality
 
 A **quality signal, not a gate**. Deterministic checks only, run over the persisted plans:
 
@@ -324,10 +337,11 @@ There is deliberately **no mean score**. Averaging seven checks where five are p
 produces a number that looks like a quality ranking, compresses the only real signal, and would be
 quoted out of context.
 
-#### What we predicted, and what happened
+### What we predicted, and what happened
 
-Predictions were written down *before* the run ([`docs/`](DECISIONS.md)) so that surprises stayed
-visible instead of being rationalised afterwards.
+Predictions were written down *before* the run — the table below is that record. Without stated
+predictions every result reads as "about what I expected", and the genuinely interesting findings
+become invisible.
 
 | | Prediction | Outcome |
 |---|---|---|
@@ -338,7 +352,7 @@ visible instead of being rationalised afterwards.
 | H5 | Build rate 100% on supported plans | ✅ — the only prediction whose failure would have implicated our code |
 | H6 | Plan depth scales with capability | ⚠️ Partial — a real gap to the local model (14 steps), essentially flat between Haiku (30) and Sonnet (32) |
 
-#### Conclusions, including one that changes the code
+### Conclusions, including one that changes the code
 
 **1. Schema-constrained decoding beat model capability.** H1 inverted for a specific, actionable
 reason: the local model is the *only* one receiving a JSON schema. Genesis sends `response_schema`
@@ -361,7 +375,7 @@ to choose Python — something Genesis never asks for and cannot currently influ
 planner *should* be told about the scaffolding constraint is a real design question, deliberately
 left open: tuning the prompt in response to these results would fit the system to its own eval set.
 
-#### What these numbers do not say
+### What these numbers do not say
 
 - **n=20 per model, one date, one version of each model.** With no failures observed, the 95% upper
   bound on a true failure rate is still ~15%. This is evidence, not proof.
@@ -391,18 +405,20 @@ defend, and an unverifiable score would undercut the numbers that are verifiable
 | 5 | Scaffolder — generate a repo that builds and passes its own tests | ✅ |
 | 6 | Eval harness — the scaffolder eval as a CI gate | ✅ |
 | — | CLI (`plan`/`scaffold`/`create`) + Ollama adapter — added outside the original 8 | ✅ |
-| 7 | Live deploy (ECS Express Mode) — [deliberately deferred](DECISIONS.md) to late Oct / Nov | ⏸️ |
-| 8 | README + eval numbers + polish | 🔄 |
+| — | Three-tier eval — CI gates, pipeline sweep across three models, structural rubric | ✅ |
+| 7 | Live deploy — [deliberately deferred](DECISIONS.md) to late Oct / Nov (D-050) | ⏸️ |
+| 8 | README + eval numbers + polish | ✅ |
 
-**Next, in order:** Tier 2 harness → start the run → Tier 3 structural rubric (scored over the
-saved plans while the run finishes) → Tier 1 determinism and graceful-degradation gates → the
-deferred deploy in late Oct / Nov.
+**Next, in order:** implement `response_schema` for the Anthropic adapter and re-run the Tier 2 eval
+(the current hosted numbers measure *unconstrained* Claude) → fix `_extract_json` so valid output
+followed by prose stops being reported as a model failure → containerise, with CI proving a repo
+scaffolded inside the image still builds → the deferred deploy.
 
 ## Architecture & practices
 
 - **One model-agnostic seam.** The adapter Protocol is the boundary; the agent loop and planner depend on it, never on a provider SDK. Swap the model by swapping one class.
 - **Testable offline.** A scripted `FakeAdapter` drives the agent loop and planner in tests, and the Ollama adapter is tested against a patched HTTP layer — no network, no keys, no spend. Live tests exist but skip automatically without credentials or a local server, so CI stays secret-free and deterministic.
-- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](DECISIONS.md) with constraint-based reasoning (D-001 … D-049 so far) — architecture, dependencies, trade-offs, and accepted costs.
+- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](DECISIONS.md) with constraint-based reasoning (D-001 … D-053 so far) — architecture, dependencies, trade-offs, and accepted costs.
 - **Minimalism as policy.** Every config line and schema field is generation + eval surface, so surface is added only when a constraint demands it.
 
 ## Run it
@@ -414,7 +430,7 @@ pytest                        # offline suite — no API key needed
 ruff check . && ruff format --check .
 ```
 
-Live paths (planner, real adapter) authenticate from the environment (`ANTHROPIC_API_KEY` or an `ant auth login` profile) and skip automatically when no credentials are present.
+Live tests are opt-in: the Anthropic smoke test runs only when `ANTHROPIC_API_KEY` is exported (D-018), and the Ollama one only when a local server with models is reachable. Both skip otherwise, so a bare `pytest` never spends tokens and CI stays secret-free. The CLI itself also authenticates from an `ant auth login` profile.
 
 ## Honest limitations (today)
 
