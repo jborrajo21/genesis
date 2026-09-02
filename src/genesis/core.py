@@ -147,6 +147,12 @@ def cmd_scaffold(plan_json: str, output_dir: str | None, force: bool) -> int:
     except json.JSONDecodeError as e:
         print_error(f"Invalid plan JSON: {e}")
         return 1
+    except KeyError as e:
+        print_error(f"Plan JSON is missing a required key: {e}")
+        return 1
+    except TypeError:
+        print_error("Plan JSON is not a plan object — expected an object with plan fields.")
+        return 1
     except Exception as e:
         print_error(f"Unexpected error: {e}")
         return 1
@@ -191,7 +197,10 @@ def cmd_create(
             print_success(f"Plan saved to {output_path}")
 
         target = Path(output_dir)
-        if target.exists():
+        if target.exists() and not force:
+            if not sys.stdin.isatty():
+                print_error(f"{output_dir} already exists. Use --force to overwrite.")
+                return 1
             if not _confirm_overwrite(output_dir):
                 print_error("Cancelled.")
                 return 1

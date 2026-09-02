@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -58,3 +59,24 @@ def test_generated_repo_builds(tmp_path, monkeypatch):
     result = build_and_test(out)
     assert result.ok, result.output
     assert (out / ".venv" / "bin" / "todo_app").exists()
+
+
+def _tree(root):
+    """Map each file's path (relative to root) to a hash of its bytes."""
+    return {
+        str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in sorted(root.rglob("*"))
+        if p.is_file()
+    }
+
+
+def test_scaffold_is_byte_identical_across_runs(tmp_path):
+    first = scaffold(sample_plan(), tmp_path / "first")
+    second = scaffold(sample_plan(), tmp_path / "second")
+    assert _tree(first) == _tree(second)
+
+
+def test_scaffold_excludes_caches(tmp_path):
+    out = scaffold(sample_plan(), tmp_path / "gen")
+    junk = {".pytest_cache", ".ruff_cache", "__pycache__"}
+    assert not [p for p in out.rglob("*") if junk & set(p.parts)]

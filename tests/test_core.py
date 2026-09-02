@@ -1,3 +1,4 @@
+import io
 import json
 
 import pytest
@@ -182,3 +183,50 @@ def test_cmd_create_reports_unreachable_server(monkeypatch, capsys, tmp_path):
     err = capsys.readouterr().err
     assert "ollama serve" in err
     assert "Could not write output" not in err
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '{"project_name": "x"}',
+        '{"project_name": "x", "summary": "s", "stack": ["Python"], "phases": "not a list"}',
+        "[]",
+        '"just a string"',
+        "null",
+    ],
+)
+def test_cmd_scaffold_rejects_malformed_plans(payload, tmp_path, capsys):
+    assert cmd_scaffold(payload, str(tmp_path / "gen"), False) == 1
+    err = capsys.readouterr().err
+    assert "Unexpected error" not in err
+    assert not (tmp_path / "gen").exists()
+
+
+def test_cmd_scaffold_accepts_plan_with_no_phases(tmp_path):
+    plan = _plan(PY)
+    plan["phases"] = []
+    assert cmd_scaffold(json.dumps(plan), str(tmp_path / "gen"), False) == 0
+    assert (tmp_path / "PLAN.md").exists() is False
+    assert (tmp_path / "gen" / "PLAN.md").exists()
+
+
+def test_cmd_create_force_overwrites_without_prompting(fake_adapter, tmp_path, monkeypatch):
+    fake_adapter(_ready(RUST))
+    out = tmp_path / "gen"
+    out.mkdir()
+    (out / "OLD.txt").write_text("stale")
+    monkeypatch.setattr("builtins.input", lambda *a: pytest.fail("--force must not prompt"))
+    assert cmd_create("idea", str(out), "anthropic", "m", None, True, 6, 10000) == 0
+    assert not (out / "OLD.txt").exists()
+    assert (out / "PLAN.md").exists()
+
+
+def test_cmd_create_without_force_refuses_when_not_a_tty(
+    fake_adapter, tmp_path, monkeypatch, capsys
+):
+    fake_adapter(_ready(RUST))
+    out = tmp_path / "gen"
+    out.mkdir()
+    monkeypatch.setattr("genesis.core.sys.stdin", io.StringIO())
+    assert cmd_create("idea", str(out), "anthropic", "m", None, False, 6, 10000) == 1
+    assert "Use --force" in capsys.readouterr().err
