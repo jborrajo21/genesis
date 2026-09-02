@@ -7,7 +7,7 @@ jobs:
         runs-on: ubuntu-latest
         defaults: 
             run: 
-                working-directory: templates/python-cli
+                working-directory: src/genesis/templates/python-cli
         steps:
             - uses: actions/checkout@v4
             - uses: actions/setup-python@v5
@@ -28,3 +28,19 @@ jobs:
             - run: ruff check .
             - run: ruff format --check .
             - run: pytest
+    docker:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - run: docker build -t genesis:ci .
+            - run: docker run --rm genesis:ci --version
+            - name: template ships inside the image
+              run: >
+                docker run --rm --entrypoint python genesis:ci -c
+                "from genesis.scaffolder import _TEMPLATE_DIR;
+                assert _TEMPLATE_DIR.is_dir(), _TEMPLATE_DIR"
+            - name: scaffold and build inside the container
+              run: >
+                docker run --rm -v "$PWD/ci:/plan:ro" genesis:ci
+                scaffold /plan/plan.json out
+                

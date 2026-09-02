@@ -8,7 +8,7 @@ from pathlib import Path
 from genesis.planner import Plan
 
 _DEFAULT_NAME = "project"
-_TEMPLATE_DIR = Path(__file__).resolve().parent.parent.parent / "templates" / "python-cli"
+_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates" / "python-cli"
 _TEMPLATE_NAME = "greetly"
 _TEMPLATE_DESCRIPTION = "A tiny greeting CLI"
 

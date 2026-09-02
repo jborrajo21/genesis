@@ -1,0 +1,4 @@
+{"project_name": "ci demo", "summary": "A command-line tool.",
+ "stack": ["Python 3.11", "argparse"], "supported": true,
+ "phases": [{"name": "Core", "steps": ["do the thing"]}],
+ "manual_checklist": []}

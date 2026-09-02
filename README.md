@@ -135,6 +135,22 @@ No API key, no token cost. Plan quality tracks the local model — see
 [honest limitations](#honest-limitations-today). If the server is not running, Genesis says so and
 tells you how to start it rather than failing with a stack trace.
 
+### Running it in a container
+
+```bash
+docker build -t genesis .
+docker run --rm -v "$PWD:/work" genesis scaffold plan.json out
+```
+
+The image is `python:3.11-slim`, runs as a non-root user, and carries the template inside the
+installed package — so a container can scaffold and then **verify the result builds**, creating a
+virtualenv and running the generated repo's tests inside itself. CI builds the image on every push
+and fails if a repo scaffolded *inside the container* doesn't install and pass its own tests.
+
+**For local use, `pip install` is better.** A CLI that writes files to your disk fits a container
+badly: you need a volume mount, and the output is owned by the container's user. The image exists
+so Genesis can be deployed, not so it can be installed.
+
 ### Exit codes
 
 `0` on success, `1` on any failure, `2` on a usage error from argument parsing. Failures print a
@@ -151,6 +167,7 @@ names the command to run.
 - **Planner** — an adaptive, bounded loop that turns an idea into a typed `Plan`: it decides each round whether to ask more or plan, capped so it can never interrogate forever, with honest limitations (a stack it can't scaffold still gets a plan plus a manual checklist).
 - **Scaffolder** — a deterministic (no-LLM, no-network) renderer that turns a `Plan` into a real Python-CLI repo: it copies the vendored template, atomically renames the package across every coupled site, ships the plan alongside the code as `PLAN.md`, and **verifies the result installs and passes its own tests in a fresh venv**. Unsupported stacks fall back to a generic scaffold (`PLAN.md` + `README.md`, no build/test step) rather than forcing the plan into a template that doesn't fit. This is the deterministic half of the eval harness — the check that a generated repo *builds and its tests pass*.
 - **Eval harness as a CI gate** — the scaffolder's `build_and_test()` check (which creates a fresh venv, installs the generated repo, and runs its tests) is wired into GitHub Actions. Every push runs the same deterministic check: if a generated repo cannot install or pass its own tests, the build fails. No model calls, no subjective grading — reproducible and offline.
+- **A container image** — `python:3.11-slim`, non-root, no compiled dependencies and no `apt-get` layer. CI builds it on every push and proves a repo scaffolded *inside the image* still installs and passes its tests, which extends the eval gate to the artefact that would actually be deployed.
 - **A three-tier eval** — deterministic CI gates, a measured pipeline success rate across a local 8B model, Haiku and Sonnet, and a structural rubric over the saved plans. Runs are persisted so they can be re-analysed without re-spending them. [The numbers, and what they don't say →](#eval-numbers)
 
 ## Eval numbers
@@ -406,19 +423,20 @@ defend, and an unverifiable score would undercut the numbers that are verifiable
 | 6 | Eval harness — the scaffolder eval as a CI gate | ✅ |
 | — | CLI (`plan`/`scaffold`/`create`) + Ollama adapter — added outside the original 8 | ✅ |
 | — | Three-tier eval — CI gates, pipeline sweep across three models, structural rubric | ✅ |
+| — | Container image, CI-verified by scaffolding inside it | ✅ |
 | 7 | Live deploy — [deliberately deferred](DECISIONS.md) to late Oct / Nov (D-050) | ⏸️ |
 | 8 | README + eval numbers + polish | ✅ |
 
 **Next, in order:** implement `response_schema` for the Anthropic adapter and re-run the Tier 2 eval
 (the current hosted numbers measure *unconstrained* Claude) → fix `_extract_json` so valid output
-followed by prose stops being reported as a model failure → containerise, with CI proving a repo
-scaffolded inside the image still builds → the deferred deploy.
+followed by prose stops being reported as a model failure → stop leaving a verification virtualenv
+inside generated repos → the deferred deploy.
 
 ## Architecture & practices
 
 - **One model-agnostic seam.** The adapter Protocol is the boundary; the agent loop and planner depend on it, never on a provider SDK. Swap the model by swapping one class.
 - **Testable offline.** A scripted `FakeAdapter` drives the agent loop and planner in tests, and the Ollama adapter is tested against a patched HTTP layer — no network, no keys, no spend. Live tests exist but skip automatically without credentials or a local server, so CI stays secret-free and deterministic.
-- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](DECISIONS.md) with constraint-based reasoning (D-001 … D-053 so far) — architecture, dependencies, trade-offs, and accepted costs.
+- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](DECISIONS.md) with constraint-based reasoning (D-001 … D-057 so far) — architecture, dependencies, trade-offs, and accepted costs.
 - **Minimalism as policy.** Every config line and schema field is generation + eval surface, so surface is added only when a constraint demands it.
 
 ## Run it
@@ -446,7 +464,8 @@ Live tests are opt-in: the Anthropic smoke test runs only when `ANTHROPIC_API_KE
 - The planner's budget is a **soft, forward-looking cap** — it bounds the next round, not the current one, so usage can overshoot by up to a turn.
 - The planner resends its instruction each round; **prompt caching** is a future optimization, not yet applied.
 - The agent loop is **infrastructure, not part of the v1 user workflow** — the CLI never invokes it.
-- The live deploy is **not built yet** (Block 7) — deferred by decision, not oversight (D-050). Until it lands, the repo demonstrates no ops work: no containerisation, IAM, or TLS.
+- **Every generated repo arrives with a 63 MB `.venv` inside it.** `build_and_test()` creates its verification virtualenv *in* the generated repo and never removes it — so a brand-new project ships with someone else's virtualenv, and if you scaffolded via Docker its binaries are Linux ones that won't run on your machine.
+- The live deploy is **not built yet** (Block 7) — deferred by decision, not oversight (D-050). The image exists and is CI-verified, so the containerisation half is done; nothing is hosted, and there is no IAM or TLS work to show.
 
 ## Docs
 

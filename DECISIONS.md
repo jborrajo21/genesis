@@ -20,7 +20,10 @@ one commit graph, which is itself part of the Sept 1 signal. Cost accepted:
 template gets no independent CI badge and isn't separately clonable; its
 correctness is only visible through Genesis's eval numbers in the README.
 - **Scope:** template-constant
-- **Eval hook:** `templates/python-cli/` exists; root CI workflow runs the
+- **Superseded in part by D-054:** the vendoring decision stands, but the path is now
+`src/genesis/templates/python-cli/` — outside `src/` the template never reached the wheel, so a
+non-editable install could not scaffold.
+- **Eval hook:** `src/genesis/templates/python-cli/` exists; root CI workflow runs the
 template's install/lint/test steps via `working-directory` and is green
 
 
@@ -484,3 +487,39 @@ the core import path; only code that has opted into the extra may import it.
 - **Reason:** D-044 made `scaffold` accept any plan JSON including hand-written files, which makes it the one place untrusted input enters. Valid JSON that is not a valid plan previously landed in the catch-all and printed `Unexpected error: 'project_name'` — correct exit code, useless message. The two clauses are split because their messages have different value: a missing key names the thing to fix, whereas every `TypeError` here is a Python indexing message (`string indices must be integers`, `'NoneType' object is not subscriptable`) that describes our internals rather than the user's file. The failure is always the same thing — "this parsed as JSON but is not a plan object" — so it says that instead. Clause order matters and follows D-048: Python matches `except` in source order, so narrower clauses must precede `except Exception`.
 - **Scope:** CLI behaviour
 - **Eval hook:** `cmd_scaffold('{"project_name": "x"}', out, False)` returns 1, prints a message naming the missing key, does not print `Unexpected error`, and leaves no directory behind; the same holds for `[]`, `null`, a bare string, and a non-list `phases`
+
+## D-054: The template lives inside the package, not beside it
+
+- **Options:** leave the template at the repo root and install the container editably · `hatch force-include` it into the wheel at its existing path · move it to `src/genesis/templates/python-cli/` and resolve it relative to the package
+- **Choice:** moved inside the package. `_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates" / "python-cli"` — one parent, not three.
+- **Reason:** D-001 vendored the template to remove a cross-repo fetch, but the *packaging* never followed the decision. `templates/` sat outside `src/`, so hatchling never put it in the wheel, and `_TEMPLATE_DIR` walked three parents up from `scaffolder.py` — which resolves to the repo root under `pip install -e .` and to `lib/pythonX.Y/` inside site-packages. **A non-editable install therefore produced a Genesis that could plan but not scaffold**, and nothing failed until a user tried to generate a repo. It was invisible because every install to date was editable; writing the Dockerfile surfaced it, since a container is the first place a normal install happens. Inside the package the template is package data: it ships in the wheel, and the path resolves relative to the artefact that actually gets installed. `force-include` was rejected because the code would still resolve a path outside the package, so the code change is needed either way — and then the config is redundant.
+- **Cost accepted:** the package directory now contains a nested project with its own `pyproject.toml`, which is unusual to read and depends on the build backend not being clever about nested project files (verified: hatchling ships it verbatim, and excludes the untracked `.pytest_cache`/`.ruff_cache` via VCS ignore). CI's `working-directory` and every doc reference to the template path move one level deeper.
+- **Scope:** project structure — **amends D-001**, whose recorded location `templates/python-cli/` is superseded by `src/genesis/templates/python-cli/`. The vendoring rationale in D-001 is unchanged and still correct.
+- **Eval hook:** `pip wheel . --no-deps` then `unzip -l *.whl | grep templates` lists all 8 template files including the template's own `pyproject.toml`, and no cache directories; installing that wheel into a fresh venv **non-editably** and running `genesis scaffold plan.json out` prints `Build and tests passed`.
+
+## D-055: Container base image — `python:3.11-slim-bookworm`
+
+- **Options:** `python:3.11-alpine` · `python:3.11-slim-bookworm` · a distroless base · a bare Debian image with Python installed via apt
+- **Choice:** `python:3.11-slim-bookworm`, pinned to the Debian release rather than the floating `3.11-slim` tag.
+- **Reason:** Alpine uses musl libc, so the manylinux wheels that make Python installs fast do not apply and pip falls back to compiling from source — slower builds, a toolchain to install, and occasional outright breakage, all to save tens of megabytes on an image whose size is irrelevant because nothing pulls it on a hot path. Distroless was rejected on a Genesis-specific ground: `build_and_test()` shells out to `python -m venv` and `pip install` at runtime (D-032), so the image needs a working Python environment and a shell, which is precisely what distroless removes. The release is pinned because the bare `3.11-slim` tag follows whatever base OS Docker Hub currently points it at, so an unchanged Dockerfile can silently change its operating system between builds.
+- **Cost accepted:** the image is 264 MB, almost entirely base image against roughly 30 KB of Genesis. Multi-stage builds and size optimisation were deliberately skipped — the base dominates, and shaving it is not where the value is.
+- **Scope:** deployment packaging
+- **Eval hook:** `docker build` succeeds with no `apt-get` layer; `docker run --rm genesis:dev --version` prints the version; `python -m venv` works inside the container, verified by a scaffold whose `build_and_test` passes
+
+## D-056: The image's entrypoint is the CLI, not a server
+
+- **Options:** `ENTRYPOINT` the `genesis` CLI · build an HTTP service now and serve it · no entrypoint, leaving `docker run` to take an arbitrary command
+- **Choice:** `ENTRYPOINT ["genesis"]` with `CMD ["--help"]`, running as a non-root user from `/work`, a writable directory intended as a volume mount.
+- **Reason:** the HTTP service does not exist, and building one here would smuggle the deferred deploy block (D-050) into a phase whose whole point is that it costs nothing and commits to nothing. Fixing the entrypoint to the CLI makes `docker run <image> plan "an idea"` read naturally while `docker run <image>` prints help. The `/app` (installed from) and `/work` (runtime cwd) split exists because generated repos are written relative to the working directory, so that directory must be writable by the non-root user — a detail that only fails when someone actually scaffolds, which is the worst time to discover it. When the deploy block adds a service, it becomes a second entrypoint or a second image; nothing here blocks that, and both ECS and Lambda consume images either way.
+- **Cost accepted:** `docker run` is a poor way to use a CLI that writes files to the user's disk — it needs a volume mount and leaves container-owned output. `pip install` remains the better path for local use, and the README says so. The image exists for deployment, not distribution.
+- **Scope:** deployment packaging
+- **Eval hook:** `docker run --rm <image>` prints help; `docker run --rm -v <dir>:/work <image> scaffold plan.json out` writes a repo to the host as a non-root user
+
+## D-057: The image installs the `anthropic` extra
+
+- **Options:** install the bare package (`pip install .`) · install with the `anthropic` extra · install `.[dev,anthropic]` including test tooling
+- **Choice:** `pip install --no-cache-dir ".[anthropic]"`.
+- **Reason:** D-017 made the provider SDK an optional extra so that Genesis installs and its CI runs with no provider dependency. That reasoning is about the *library*; a deployable image is a different artefact, and an image whose hosted adapter raises `ImportError` on first use is not deployable. The Ollama adapter needs nothing extra (stdlib `urllib`, D-035) but needs a reachable server, which a container will not have by default — so the hosted path is the one that must work out of the box. `dev` is excluded: the image is verified by scaffolding a repo and building it, not by running Genesis's own test suite, and `tests/` is excluded from the build context anyway.
+- **Cost accepted:** a deliberate divergence between what the wheel requires and what the image installs, so "Genesis has no dependencies" is true of the package and not of the container. The image also carries the SDK for users who only ever run Ollama.
+- **Scope:** deployment packaging — narrows D-017 for the container only
+- **Eval hook:** `docker run --rm --entrypoint python <image> -c "import anthropic"` succeeds; the same import from a plain `pip install genesis` still fails, as D-017 intends

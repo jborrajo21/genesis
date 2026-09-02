@@ -1,0 +1,46 @@
+# Build context exclusions.
+#
+# WARNING: templates/ must NOT be excluded. The scaffolder reads the vendored
+# Python CLI template from the filesystem at generation time (D-001); an image
+# without it can plan but not scaffold, and nothing fails until a user tries.
+
+# Virtualenvs and build artefacts
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tooling caches (including the ones vendored inside templates/)
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# VCS and CI config — not needed at runtime
+.git/
+.gitignore
+.github/
+
+# Eval artefacts: regenerated on demand, hundreds of KB and growing,
+# and useless inside the image
+evals/results/
+
+# Working docs and local agent state. Excluded partly to keep the image lean
+# and partly for layer caching: these change constantly, and a COPY layer that
+# depends on them would rebuild on every doc edit.
+docs/
+CLAUDE.md
+README.md
+DECISIONS.md
+.claude/
+
+# Tests are not needed at runtime. The container is verified by scaffolding a
+# repo and building it, not by running Genesis's own suite. Reversible: drop
+# this line if you later want `pytest` to run inside the image.
+tests/
+
+# Scratch and OS noise
+scratch.py
+.DS_Store
