@@ -85,7 +85,8 @@ def classification(records):
     print(
         "\n*Recommended Python* is a model-choice property — did the model reach for a stack "
         "Genesis can scaffold. *Python plans we accepted* isolates **our** heuristic: of the "
-        "plans that did recommend Python, how many Genesis accepted as scaffoldable. *Idea → buildable "
+        "plans that did recommend Python, "
+        "how many Genesis accepted as scaffoldable. *Idea → buildable "
         "repo* is what a user experiences, and is the product of both.\n\n"
         "The first two columns exclude plans that failed to parse — a failed plan has no "
         "stack to inspect and no `supported` value — which is why their n can be lower. "

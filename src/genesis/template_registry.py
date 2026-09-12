@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,12 @@ PYTHON_CLI = Template(
 )
 
 TEMPLATES: tuple[Template, ...] = (PYTHON_CLI,)
+_TEMPLATES_ROOT = Path(__file__).resolve().parent / "templates"
+
+
+def template_dir(template: Template) -> Path:
+    """Filesystem location of a template's files inside the installed package."""
+    return _TEMPLATES_ROOT / template.path
 
 
 def _mentions(text: str, marker: str) -> bool:

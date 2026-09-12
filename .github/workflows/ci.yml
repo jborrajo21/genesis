@@ -40,11 +40,11 @@ jobs:
             - uses: actions/checkout@v4
             - run: docker build -t genesis:ci .
             - run: docker run --rm genesis:ci --version
-            - name: template ships inside the image
+            - name: every registered template ships inside the image
               run: >
                 docker run --rm --entrypoint python genesis:ci -c
-                "from genesis.scaffolder import _TEMPLATE_DIR;
-                assert _TEMPLATE_DIR.is_dir(), _TEMPLATE_DIR"
+                "from genesis.template_registry import TEMPLATES, template_dir;
+                assert all(template_dir(t).is_dir() for t in TEMPLATES), TEMPLATES"
             - name: scaffold and build inside the container
               run: >
                 docker run --rm -v "$PWD/ci:/plan:ro" genesis:ci

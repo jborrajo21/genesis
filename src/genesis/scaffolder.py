@@ -6,12 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from genesis.planner import Plan
-from genesis.template_registry import select_template
+from genesis.template_registry import select_template, template_dir
 
 _DEFAULT_NAME = "project"
-
-
-_TEMPLATES_ROOT = Path(__file__).resolve().parent / "templates"
 
 
 @dataclass
@@ -42,7 +39,7 @@ def scaffold(plan: Plan, target_dir: Path) -> Path:
     name = normalize(plan.project_name)
 
     shutil.copytree(
-        _TEMPLATES_ROOT / template.path,
+        template_dir(template),
         target_dir,
         ignore=shutil.ignore_patterns(".pytest_cache", ".ruff_cache", "__pycache__"),
     )
