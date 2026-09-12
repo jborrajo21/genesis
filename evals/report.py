@@ -69,23 +69,24 @@ def summary(records):
 def classification(records):
     print("\n## Classification, decomposed\n")
     print("Three different questions that a single accuracy number would conflate.\n")
-    print("| Model | Recommended Python | Classified correctly | Idea → buildable repo |")
+    print("| Model | Recommended Python | Python plans accepted | Idea → buildable repo |")
     print("|---|---|---|---|")
     for model in models(records):
         parsed = [r for r in _sweep(records) if r["model"] == model and r["plan_ok"]]
         want = [r for r in parsed if r["expected_supported"]]
         py = [r for r in want if _recommends_python(r)]
-        correct = [r for r in parsed if r["supported"] == r["expected_supported"]]
+        accepted = [r for r in py if r["supported"]]
         attempted = [r for r in _sweep(records) if r["model"] == model and r["expected_supported"]]
         built = [r for r in attempted if r["installed"] and r["tested"]]
         print(
-            f"| {model} | {_pct(len(py), len(want))} | {_pct(len(correct), len(parsed))} "
+            f"| {model} | {_pct(len(py), len(want))} | {_pct(len(accepted), len(py))} "
             f"| {_pct(len(built), len(attempted))} |"
         )
     print(
-        "\n*Recommended Python* is a model-choice property. *Classified correctly* is whether "
-        "`_is_supported` read the recommended stack right. *Idea → buildable repo* is what a user "
-        "actually experiences, and is the product of both.\n\n"
+        "\n*Recommended Python* is a model-choice property — did the model reach for a stack "
+        "Genesis can scaffold. *Python plans we accepted* isolates **our** heuristic: of the "
+        "plans that did recommend Python, how many Genesis accepted as scaffoldable. *Idea → buildable "
+        "repo* is what a user experiences, and is the product of both.\n\n"
         "The first two columns exclude plans that failed to parse — a failed plan has no "
         "stack to inspect and no `supported` value — which is why their n can be lower. "
         "*Idea → buildable repo* deliberately does not exclude them: a plan that never "

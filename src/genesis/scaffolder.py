@@ -6,11 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from genesis.planner import Plan
+from genesis.template_registry import select_template
 
 _DEFAULT_NAME = "project"
-_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates" / "python-cli"
-_TEMPLATE_NAME = "greetly"
-_TEMPLATE_DESCRIPTION = "A tiny greeting CLI"
+
+
+_TEMPLATES_ROOT = Path(__file__).resolve().parent / "templates"
 
 
 @dataclass
@@ -34,13 +35,14 @@ def normalize(name: str) -> str:
 
 
 def scaffold(plan: Plan, target_dir: Path) -> Path:
-    if not plan.supported:
+    template = select_template(plan.stack)
+    if template is None:
         return _scaffold_generic(plan, target_dir)
 
     name = normalize(plan.project_name)
 
     shutil.copytree(
-        _TEMPLATE_DIR,
+        _TEMPLATES_ROOT / template.path,
         target_dir,
         ignore=shutil.ignore_patterns(".pytest_cache", ".ruff_cache", "__pycache__"),
     )
@@ -48,13 +50,13 @@ def scaffold(plan: Plan, target_dir: Path) -> Path:
     for path in target_dir.rglob("*"):
         if path.is_file():
             text = path.read_text()
-            if _TEMPLATE_NAME in text:
-                path.write_text(text.replace(_TEMPLATE_NAME, name))
+            if template.package in text:
+                path.write_text(text.replace(template.package, name))
 
-    (target_dir / "src" / _TEMPLATE_NAME).rename(target_dir / "src" / name)
+    (target_dir / "src" / template.package).rename(target_dir / "src" / name)
 
     pyproject = target_dir / "pyproject.toml"
-    pyproject.write_text(pyproject.read_text().replace(_TEMPLATE_DESCRIPTION, plan.summary))
+    pyproject.write_text(pyproject.read_text().replace(template.description, plan.summary))
     (target_dir / "PLAN.md").write_text(_render_plan_md(plan))
 
     return target_dir

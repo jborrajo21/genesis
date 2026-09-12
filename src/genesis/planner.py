@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Literal
 
 from genesis.adapter import Message, ModelAdapter, StopReason
+from genesis.template_registry import select_template
 
 _PLANNING_INSTRUCTION = """\
 You are a software project planner. Your plan will be handed to an AI agent that \
@@ -102,35 +103,12 @@ class RoundResult:
     plan: Plan | None = None
 
 
-_UNSUPPORTED_MARKERS = (
-    "react",
-    "vue",
-    "flask",
-    "django",
-    "fastapi",
-    "node",
-    "ios",
-    "android",
-    "swift",
-    "kotlin",
-    "web",
-    "mobile",
-    "gui",
-    "electron",
-)
-
-
-def _is_supported(stack: list[str]) -> bool:
-    text = " ".join(stack).lower()
-    return "python" in text and not any(m in text for m in _UNSUPPORTED_MARKERS)
-
-
 def _parse_plan(data: dict) -> Plan:
     return Plan(
         project_name=data["project_name"],
         summary=data["summary"],
         stack=data["stack"],
-        supported=_is_supported(data["stack"]),  # WE compute this, not the model
+        supported=select_template(data["stack"]) is not None,
         phases=[Phase(name=p["name"], steps=p["steps"]) for p in data["phases"]],
         manual_checklist=data.get("manual_checklist", []),
     )
