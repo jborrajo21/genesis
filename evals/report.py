@@ -72,19 +72,24 @@ def classification(records):
     print("| Model | Recommended Python | Classified correctly | Idea → buildable repo |")
     print("|---|---|---|---|")
     for model in models(records):
-        rs = [r for r in _sweep(records) if r["model"] == model and r["plan_ok"]]
-        want = [r for r in rs if r["expected_supported"]]
+        parsed = [r for r in _sweep(records) if r["model"] == model and r["plan_ok"]]
+        want = [r for r in parsed if r["expected_supported"]]
         py = [r for r in want if _recommends_python(r)]
-        correct = [r for r in rs if r["supported"] == r["expected_supported"]]
-        built = [r for r in want if r["installed"] and r["tested"]]
+        correct = [r for r in parsed if r["supported"] == r["expected_supported"]]
+        attempted = [r for r in _sweep(records) if r["model"] == model and r["expected_supported"]]
+        built = [r for r in attempted if r["installed"] and r["tested"]]
         print(
-            f"| {model} | {_pct(len(py), len(want))} | {_pct(len(correct), len(rs))} "
-            f"| {_pct(len(built), len(want))} |"
+            f"| {model} | {_pct(len(py), len(want))} | {_pct(len(correct), len(parsed))} "
+            f"| {_pct(len(built), len(attempted))} |"
         )
     print(
         "\n*Recommended Python* is a model-choice property. *Classified correctly* is whether "
         "`_is_supported` read the recommended stack right. *Idea → buildable repo* is what a user "
-        "actually experiences, and is the product of both."
+        "actually experiences, and is the product of both.\n\n"
+        "The first two columns exclude plans that failed to parse — a failed plan has no "
+        "stack to inspect and no `supported` value — which is why their n can be lower. "
+        "*Idea → buildable repo* deliberately does not exclude them: a plan that never "
+        "parsed produced no repo, and excluding it would reward a model for failing early."
     )
 
 

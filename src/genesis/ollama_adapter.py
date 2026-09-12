@@ -1,4 +1,5 @@
 import json
+import os
 import urllib.error
 import urllib.request
 
@@ -23,12 +24,13 @@ class OllamaAdapter:
         self,
         model: str = "gemma4:latest",
         max_tokens: int = 10000,
-        base_url: str = DEFAULT_BASE_URL,
+        base_url: str | None = None,
         timeout: int = 120,
     ):
+        resolved = base_url or os.environ.get("GENESIS_OLLAMA_BASE_URL") or DEFAULT_BASE_URL
         self._model = model
         self._max_tokens = max_tokens
-        self._url = f"{base_url.rstrip('/')}/chat/completions"
+        self._url = f"{resolved.rstrip('/')}/chat/completions"
         self._timeout = timeout
 
     def complete(
@@ -37,7 +39,6 @@ class OllamaAdapter:
         tools: list[ToolDef] | None = None,
         response_schema: dict | None = None,
     ) -> Completion:
-        """Complete a conversation. Tools are accepted but never sent or returned (D-036)."""
         payload = {
             "model": self._model,
             "messages": [{"role": m.role, "content": m.content} for m in messages],

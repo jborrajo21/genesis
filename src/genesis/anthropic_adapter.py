@@ -41,6 +41,8 @@ class AnthropicAdapter:
                 {"name": t.name, "description": t.description, "input_schema": t.input_schema}
                 for t in tools
             ]
+        if response_schema:
+            kwargs["output_config"] = {"format": {"type": "json_schema", "schema": response_schema}}
 
         response = self._client.messages.create(**kwargs)
 

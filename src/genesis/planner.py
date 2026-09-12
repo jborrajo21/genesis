@@ -61,14 +61,17 @@ _PLAN_SCHEMA = {
                             "steps": {"type": "array", "items": {"type": "string"}},
                         },
                         "required": ["name", "steps"],
+                        "additionalProperties": False,
                     },
                 },
                 "manual_checklist": {"type": "array", "items": {"type": "string"}},
             },
             "required": ["project_name", "summary", "stack", "phases"],
+            "additionalProperties": False,
         },
     },
     "required": ["status"],
+    "additionalProperties": False,
 }
 
 

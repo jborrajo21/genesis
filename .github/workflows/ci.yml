@@ -28,6 +28,12 @@ jobs:
             - run: ruff check .
             - run: ruff format --check .
             - run: pytest
+            - name: end-to-end plan and scaffold against a stub model server
+              run: |
+                python ci/stub_server.py &
+                for _ in $(seq 40); do curl -sf http://127.0.0.1:8765/ >/dev/null && break; sleep 0.25; done
+                GENESIS_OLLAMA_BASE_URL=http://127.0.0.1:8765/v1 \
+                  genesis create "a cli todo app" out --adapter ollama --model stub --force
     docker:
         runs-on: ubuntu-latest
         steps:
