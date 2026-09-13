@@ -52,6 +52,7 @@ class Record:
     tokens: int | None = None
     seconds: float | None = None
     installed: bool | None = None
+    entrypoint: bool | None = None
     tested: bool | None = None
     build_output: str | None = None
     plan: dict | None = None
@@ -84,6 +85,7 @@ def run_one(idea, expected, adapter_name, model, repeat=0, build=True, adapter=N
             with TemporaryDirectory() as tmp:
                 result = build_and_test(scaffold(plan, Path(tmp) / "gen"))
                 record.installed = result.installed
+                record.entrypoint = result.entrypoint
                 record.tested = result.tested
                 if not result.ok:
                     record.build_output = result.output[-2000:]

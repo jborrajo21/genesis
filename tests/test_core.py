@@ -230,3 +230,8 @@ def test_cmd_create_without_force_refuses_when_not_a_tty(
     monkeypatch.setattr("genesis.core.sys.stdin", io.StringIO())
     assert cmd_create("idea", str(out), "anthropic", "m", None, False, 6, 10000) == 1
     assert "Use --force" in capsys.readouterr().err
+
+
+def test_cmd_scaffold_unsupported_prints_no_setup_steps(tmp_path, capsys):
+    assert cmd_scaffold(json.dumps(_plan(RUST)), str(tmp_path / "gen"), False) == 0
+    assert "Run:" not in capsys.readouterr().out

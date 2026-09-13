@@ -27,7 +27,7 @@ Only Tier 1 can fail a build.
 
 ## Tier 1 — render correctness
 
-Ten renders under project names chosen to stress name normalisation, each installed into a fresh venv with its own tests run:
+Ten renders under project names chosen to stress name normalisation. Each is installed into a throwaway virtualenv, its console script is run, its own tests are run, and the virtualenv is then removed — so the repo left behind contains only its own files:
 
 | Render variants | Installed | Tests passed | Mean wall time |
 |---|---|---|---|
@@ -39,7 +39,7 @@ Data Pipeline → data_pipeline    log-parser → log_parser    CSV Munger → c
 note taker → note_taker     Ünicode Tool → nicode_tool      a → a
 ```
 
-**Read this precisely.** It is 10 *renders*, not 10 projects — the project name is the only variable, and "its own tests" means the template's suite passing after the package rename. It proves **render correctness**: valid packaging, an importable package, a working console script, no stray template identifiers. It does not prove the generated app does what the plan describes.
+**Read this precisely.** It is 10 *renders*, not 10 projects — the project name is the only variable, and "its own tests" means the template's suite passing after the package rename. It proves **render correctness**: valid packaging, an importable package, a console script that actually executes (it is run, not merely checked for), and no stray template identifiers or verification residue. It does not prove the generated app does what the plan describes.
 
 Two of these run on every push as a CI gate, alongside a byte-identical-render check, a no-cache-leakage check, five malformed-plan cases, and an end-to-end `genesis create` against a stub model server.
 

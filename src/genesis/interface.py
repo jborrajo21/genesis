@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 
 from genesis.anthropic_adapter import SUPPORTED_MODELS as ANTHROPIC_MODELS
 from genesis.ollama_adapter import SUPPORTED_MODELS as OLLAMA_MODELS
@@ -95,3 +96,11 @@ def _select_model(adapter: str) -> str:
         return models[idx]
     except (ValueError, IndexError):
         raise ValueError("Invalid choice")
+
+
+def print_next_steps(repo_dir: Path) -> None:
+    """Commands a user needs to start working in a freshly scaffolded repo."""
+    print("\nRun:")
+    print(f"  cd {repo_dir}")
+    print("  python -m venv .venv && source .venv/bin/activate")
+    print('  pip install -e ".[dev]"')

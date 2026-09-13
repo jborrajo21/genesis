@@ -34,6 +34,7 @@ def test_scaffold_structure(tmp_path):
     text = (out / "pyproject.toml").read_text()
     assert 'name = "todo_app"' in text
     assert "A command-line todo list manager." in text
+    assert (out / ".gitignore").exists()
 
 
 def test_no_stray_greetly(tmp_path):
@@ -58,7 +59,10 @@ def test_generated_repo_builds(tmp_path, monkeypatch):
     out = scaffold(sample_plan(), Path("gen"))
     result = build_and_test(out)
     assert result.ok, result.output
-    assert (out / ".venv" / "bin" / "todo_app").exists()
+    assert result.entrypoint
+    assert not (out / ".venv").exists()
+    assert not (out / ".pytest_cache").exists()
+    assert not list(out.rglob("__pycache__"))
 
 
 def _tree(root):

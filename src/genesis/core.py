@@ -16,6 +16,7 @@ from genesis.interface import (
     _select_model,
     answer_fn,
     print_error,
+    print_next_steps,
     print_progress,
     print_success,
 )
@@ -136,8 +137,9 @@ def cmd_scaffold(plan_json: str, output_dir: str | None, force: bool) -> int:
         res = build_and_test(repo_dir)
 
         print_success(f"Scaffolded to {repo_dir}")
-        if res.installed and res.tested:
+        if res.ok:
             print_success("Build and tests passed")
+            print_next_steps(repo_dir)
             return 0
         else:
             print_error("Build or tests failed")

@@ -4,6 +4,7 @@ A tiny greeting CLI.
 
 ## Install
 
+    python -m venv .venv && source .venv/bin/activate
     pip install -e ".[dev]"
 
 ## Usage

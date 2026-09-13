@@ -1,6 +1,8 @@
+import os
 import re
 import shutil
 import subprocess
+import tomllib
 import venv
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,12 +16,13 @@ _DEFAULT_NAME = "project"
 @dataclass
 class BuildResult:
     installed: bool
+    entrypoint: bool
     tested: bool
     output: str
 
     @property
     def ok(self) -> bool:
-        return self.installed and self.tested
+        return self.installed and self.entrypoint and self.tested
 
 
 def normalize(name: str) -> str:
@@ -74,30 +77,38 @@ def _render_plan_md(plan: Plan) -> str:
 
 
 def build_and_test(repo_dir: Path) -> BuildResult:
+    """Verify a generated repo in a throwaway venv, leaving no trace behind."""
     repo_dir = repo_dir.resolve()
     venv_dir = repo_dir / ".venv"
-    venv.create(venv_dir, with_pip=True)
-    py = venv_dir / "bin" / "python"
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
 
-    install = subprocess.run(
-        [str(py), "-m", "pip", "install", "-e", ".[dev]"],
-        cwd=repo_dir,
-        capture_output=True,
-        text=True,
-    )
-    if install.returncode != 0:
-        return BuildResult(installed=False, tested=False, output=install.stdout + install.stderr)
-    test = subprocess.run(
-        [str(py), "-m", "pytest"],
-        cwd=repo_dir,
-        capture_output=True,
-        text=True,
-    )
-    return BuildResult(
-        installed=True,
-        tested=test.returncode == 0,
-        output=install.stdout + install.stderr + test.stdout + test.stderr,
-    )
+    def run(args):
+        return subprocess.run(args, cwd=repo_dir, capture_output=True, text=True, env=env)
+
+    try:
+        venv.create(venv_dir, with_pip=True)
+        py = venv_dir / "bin" / "python"
+
+        install = run([str(py), "-m", "pip", "install", "-e", ".[dev]"])
+        output = install.stdout + install.stderr
+        if install.returncode != 0:
+            return BuildResult(False, False, False, output)
+
+        entry = run([str(venv_dir / "bin" / _console_script(repo_dir)), "--help"])
+        output += entry.stdout + entry.stderr
+        if entry.returncode != 0:
+            return BuildResult(True, False, False, output)
+
+        test = run([str(py), "-m", "pytest", "-p", "no:cacheprovider"])
+        return BuildResult(True, True, test.returncode == 0, output + test.stdout + test.stderr)
+    finally:
+        shutil.rmtree(venv_dir, ignore_errors=True)
+
+
+def _console_script(repo_dir: Path) -> str:
+    """The generated repo's entry-point name, read from its own pyproject."""
+    config = tomllib.loads((repo_dir / "pyproject.toml").read_text())
+    return next(iter(config["project"]["scripts"]))
 
 
 def _scaffold_generic(plan: Plan, target_dir: Path) -> Path:

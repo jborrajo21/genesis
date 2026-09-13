@@ -4,7 +4,7 @@ An AI agent that turns a project idea into a **structured, buildable plan** and 
 
 ![CI](https://github.com/jborrajo21/genesis/actions/workflows/ci.yml/badge.svg)
 
-> **Status: in active development.** Blocks 1–6 of 8 are built, plus a user-facing CLI, a second (local, free) model backend, and a three-tier eval harness measured across three models ([results](#eval-numbers)). The live deploy is **scheduled, not skipped** — deferred to late Oct / Nov so the hosted URL is funded and alive when it matters, rather than lapsing after a month (D-050). See the [roadmap](#roadmap).
+> **Status: in active development.** Everything works end to end — CLI, two model backends, a deterministic scaffolder gated in CI, and a three-tier eval measured across three models ([results](#eval-numbers)). The one thing missing is a **live deploy**, which is scheduled rather than skipped: targeted for mid-October, timed so the URL is alive through the winter rather than lapsing before anyone looks (D-050). See the [roadmap](#roadmap).
 
 ## What it is
 
@@ -83,10 +83,16 @@ $ genesis create "a cli todo app with local storage" ~/my-todo \
 
 → Scaffolding... ✓ Scaffolded to ~/my-todo
 ✓ Build and tests passed
+
+Run:
+  cd ~/my-todo
+  python -m venv .venv && source .venv/bin/activate
+  pip install -e ".[dev]"
 ```
 
-That last line is the point: Genesis created a fresh virtualenv, installed the generated repo into
-it, and ran the repo's own test suite before telling you it worked.
+`Build and tests passed` is the point: Genesis created a throwaway virtualenv, installed the
+generated repo into it, ran its command and its test suite — then **deleted the virtualenv**, so
+what you get is 36 KB of project rather than 47 MB of someone else's environment.
 
 ### Planning on its own
 
@@ -150,16 +156,16 @@ to start it.
 
 ## Built so far
 
-- **CLI** — three subcommands: `plan` (idea → plan JSON, printed to stdout or saved with `--output`, with an interactive save prompt when run in a terminal without the flag), `scaffold` (a plan JSON file → repo, with `--force` to overwrite an existing directory), and `create` (plan + scaffold end-to-end, prompting before overwriting an existing output directory). Idea, output directory, adapter, and model are prompted for interactively when not passed as arguments; `--max-rounds` (default 6) and `--max-tokens` (default 10000) are flag-only, since their defaults cover the common case.
-- **Python CLI template** — a minimal, correct reference repo (packaging, tests, lint, CI) that the scaffolder renders. Hand-built first, so its generated output is evaluated against something understood line-by-line.
-- **Model-agnostic backend adapter** — a `ModelAdapter` Protocol that hides the provider behind a uniform `complete()` call, carrying tool definitions, a provider-neutral stop reason, and an optional response schema. **Two** adapters implement it: Anthropic (hosted) and Ollama (local). The rest of the system never imports a provider SDK, so models are swappable and everything is testable offline against a `FakeAdapter`.
-- **Ollama adapter — free, local, no API key** — talks to Ollama's OpenAI-compatible endpoint over stdlib `urllib`, adding no dependency. Planning runs entirely on your own machine at zero token cost. Small local models struggle to emit strictly-shaped JSON, so the planner sends a JSON schema and the adapter constrains decoding to it. That turned out to be decisive: in the eval, the schema-constrained local model produced valid plans **20/20**, beating both hosted models.
-- **Agent loop** — a hand-built tool-using loop (an LLM autonomously calling tools until done) with guardrails (`max_turns`, a token budget) and per-run telemetry (tools called, tokens, turns). Runs on the adapter Protocol, verified live and offline.
-- **Planner** — an adaptive, bounded loop that turns an idea into a typed `Plan`: it decides each round whether to ask more or plan, capped so it can never interrogate forever, with honest limitations (a stack it can't scaffold still gets a plan plus a manual checklist).
-- **Scaffolder** — a deterministic (no-LLM, no-network) renderer that turns a `Plan` into a real Python-CLI repo: it copies the vendored template, atomically renames the package across every coupled site, ships the plan alongside the code as `PLAN.md`, and **verifies the result installs and passes its own tests in a fresh venv**. Unsupported stacks fall back to a generic scaffold (`PLAN.md` + `README.md`, no build/test step) rather than forcing the plan into a template that doesn't fit. This is the deterministic half of the eval harness — the check that a generated repo *builds and its tests pass*.
-- **Eval harness as a CI gate** — the scaffolder's `build_and_test()` check (which creates a fresh venv, installs the generated repo, and runs its tests) is wired into GitHub Actions. Every push runs the same deterministic check: if a generated repo cannot install or pass its own tests, the build fails. No model calls, no subjective grading — reproducible and offline.
-- **A container image** — `python:3.11-slim`, non-root, no compiled dependencies and no `apt-get` layer. CI builds it on every push and proves a repo scaffolded *inside the image* still installs and passes its tests, which extends the eval gate to the artefact that would actually be deployed.
-- **A three-tier eval** — deterministic CI gates, a measured pipeline success rate across a local 8B model, Haiku and Sonnet, and a structural rubric over the saved plans. Runs are persisted so they can be re-analysed without re-spending them. [The numbers, and what they don't say →](#eval-numbers)
+- **CLI** — `plan`, `scaffold`, `create`. Every positional argument is optional and prompted for when omitted, so it works interactively or scripted. Details in [Using the CLI](#using-the-cli).
+- **Python CLI template** — a minimal, correct reference repo (packaging, tests, lint, CI) that the scaffolder renders. Hand-built first, so its generated output is checked against something understood line by line.
+- **Model-agnostic adapter** — a `ModelAdapter` Protocol hiding the provider behind one `complete()` call, carrying tool definitions, a provider-neutral stop reason, and an optional response schema. Two adapters implement it: Anthropic (hosted) and Ollama (local). Nothing outside them imports a provider SDK, so models are swappable and the rest of the system is testable offline against a `FakeAdapter`.
+- **Ollama adapter — free, local, no API key** — talks to Ollama's OpenAI-compatible endpoint over stdlib `urllib`, adding no dependency. Planning runs on your own machine at zero token cost.
+- **Schema-constrained planning** — the planner sends a JSON schema and **both** adapters constrain decoding to it. That turned out to be decisive: it took hosted plan validity from 90% to 100%, and eliminated a failure mode where valid JSON followed by prose was rejected.
+- **Planner** — an adaptive, bounded loop: each round the model decides whether to ask more or plan, capped so it can never interrogate forever. A stack it can't scaffold still gets a plan plus a manual checklist rather than a refusal.
+- **Scaffolder** — deterministic, no LLM and no network beyond `pip`. Copies the template, renames the package across every coupled site, ships the plan as `PLAN.md`, and **verifies it installs, that its command actually runs, and that its tests pass** — in a throwaway virtualenv that is then removed, so the repo you get contains only its own files (36 KB, not 47 MB). CI runs that check on every push, so a broken render fails the build. Which template applies is a registry lookup on the recommended stack, so "unsupported" is the absence of a match rather than a maintained denylist.
+- **Agent loop** — a hand-built tool-using loop with guardrails (`max_turns`, a token budget) and per-run telemetry. Infrastructure for later work; the CLI does not use it.
+- **Container image** — `python:3.11-slim`, non-root, no compiled dependencies and no `apt-get` layer. CI builds it every push and proves a repo scaffolded *inside the image* still installs and passes its tests.
+- **A three-tier eval** — deterministic CI gates, a measured pipeline success rate across a local 8B model, Haiku and Sonnet, and a structural rubric over the saved plans. Every run is persisted, so it can be re-analysed without re-spending it. [The numbers, and what they don't say →](#eval-numbers)
 
 ## Eval numbers
 
@@ -217,19 +223,18 @@ stable property of an idea** — for identical input, Sonnet chose Python twice 
 | — | CLI (`plan`/`scaffold`/`create`) + Ollama adapter — added outside the original 8 | ✅ |
 | — | Three-tier eval — CI gates, pipeline sweep across three models, structural rubric | ✅ |
 | — | Container image, CI-verified by scaffolding inside it | ✅ |
-| 7 | Live deploy — [deliberately deferred](DECISIONS.md) to late Oct / Nov (D-050) | ⏸️ |
+| 7 | Live deploy — [deliberately deferred](DECISIONS.md) to mid-October (D-050) | ⏸️ |
 | 8 | README + eval numbers + polish | ✅ |
 
-**Next, in order:** implement `response_schema` for the Anthropic adapter and re-run the Tier 2 eval
-(the current hosted numbers measure *unconstrained* Claude) → fix `_extract_json` so valid output
-followed by prose stops being reported as a model failure → stop leaving a verification virtualenv
-inside generated repos → the deferred deploy.
+**Next, in order:** publish to PyPI → measure a 1–2B local model as a fourth rung on the eval
+ladder → the deploy → a template registry with a second template, which is the only thing that
+would move the measured bottleneck.
 
 ## Architecture & practices
 
 - **One model-agnostic seam.** The adapter Protocol is the boundary; the agent loop and planner depend on it, never on a provider SDK. Swap the model by swapping one class.
 - **Testable offline.** A scripted `FakeAdapter` drives the agent loop and planner in tests, and the Ollama adapter is tested against a patched HTTP layer — no network, no keys, no spend. Live tests exist but skip automatically without credentials or a local server, so CI stays secret-free and deterministic.
-- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](DECISIONS.md) with constraint-based reasoning (D-001 … D-057 so far) — architecture, dependencies, trade-offs, and accepted costs.
+- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](DECISIONS.md) with constraint-based reasoning (D-001 … D-065 so far) — architecture, dependencies, trade-offs, and accepted costs.
 - **Minimalism as policy.** Every config line and schema field is generation + eval surface, so surface is added only when a constraint demands it.
 
 ## Run it
@@ -245,20 +250,34 @@ Live tests are opt-in: the Anthropic smoke test runs only when `ANTHROPIC_API_KE
 
 ## Honest limitations (today)
 
-- The scaffolder renders **one template** (Python CLI) and generates a **skeleton, not the finished project** — it proves generation *correctness* (a valid, installable, test-passing repo for any name), not that the app does what the plan describes; the plan rides along in `PLAN.md` to build from.
-- Only one scaffold target exists; other stacks get an honest "unsupported" plan + manual checklist, determined by a **keyword heuristic** on the recommended stack.
-- **Ollama works, with caveats.** Planning is constrained to a JSON schema (D-049), and that is load-bearing: with it, the local 8B model produced valid JSON in **20/20** runs — the *best* of the three models. Without it, an earlier sample failed to parse in 2 of 3 runs. What local models still get wrong is content placement: a third of gemma4's plans named a phase "Manual Checklist" instead of filling the `manual_checklist` field, and over a third of its unsupported plans shipped with an empty checklist. **Tool-calling is not supported** on this backend by design (it degrades to text-only), so the agent loop stays Anthropic-first.
-- **Planning depth is the model's judgement, not a setting.** The loop is adaptive (D-026): each round the model decides whether to ask more or plan now, and `--max-rounds` caps that rather than driving it. Measured over 20 ideas: the local 8B model asked a median of **5 rounds** and produced **14 steps**, while both Claude models asked **2** and produced **30–32**. So more questions does not mean a deeper plan — the weaker model asks more and delivers less. Depth tracks capability; round count tracks something closer to uncertainty.
-- **The Anthropic adapter ignores `response_schema`** — it accepts the parameter for Protocol conformance and drops it (D-049), on the assumption that Claude returns valid JSON reliably without constraint. The eval says otherwise: both Claude models parsed at 90%, against 100% for the schema-constrained local model, and 4 of 5 total failures were hosted. Implementing it is the top fix, and **the eval must be re-run afterwards** — every hosted number published here measures *unconstrained* Claude and does not transfer.
-- **`_extract_json` rejects valid model output** that is followed by prose, which caused 2 of the 5 observed failures. Reported to the user as "model did not return valid JSON", which blames the model for our bug.
-- **The Anthropic adapter has no offline tests**, so its stop-reason and tool-call mapping are unverified in CI — its only test is a live smoke test gated on an explicit `ANTHROPIC_API_KEY` opt-in (D-018), which CI never sets. The newer Ollama adapter has twelve offline tests; the older, more intricate one has none.
-- The plan's shape is stated **twice** — as prose in the planning instruction and as a JSON schema — so the two can drift, with the schema winning for Ollama and the prose for Anthropic.
-- Name normalisation **drops non-ASCII characters** rather than transliterating them: `Ünicode Tool` becomes `nicode_tool`. Valid and installable, but not what you'd have named it.
-- The planner's budget is a **soft, forward-looking cap** — it bounds the next round, not the current one, so usage can overshoot by up to a turn.
-- The planner resends its instruction each round; **prompt caching** is a future optimization, not yet applied.
-- The agent loop is **infrastructure, not part of the v1 user workflow** — the CLI never invokes it.
-- **Every generated repo arrives with a 63 MB `.venv` inside it.** `build_and_test()` creates its verification virtualenv *in* the generated repo and never removes it — so a brand-new project ships with someone else's virtualenv, and if you scaffolded via Docker its binaries are Linux ones that won't run on your machine.
-- The live deploy is **not built yet** (Block 7) — deferred by decision, not oversight (D-050). The image exists and is CI-verified, so the containerisation half is done; nothing is hosted, and there is no IAM or TLS work to show.
+**What it generates**
+
+- The scaffolder renders **one template** (Python CLI) and produces a **skeleton, not a finished project**. It proves generation *correctness* — a valid, installable, test-passing repo for any project name — not that the app does what the plan describes. The plan rides along in `PLAN.md` to build from.
+- Anything else gets an honest "unsupported" plan plus a manual checklist. Which template applies is a **keyword match on the recommended stack**, which is the weak link below.
+- Name normalisation **drops non-ASCII** rather than transliterating: `Ünicode Tool` becomes `nicode_tool`. Valid and installable, not what you'd have named it.
+
+**Stack classification — the known weak point**
+
+- **One incidental word can veto a scaffoldable plan.** A plan listing `Python 3.10+`, `Jinja2`, `watchdog` and *"Flask or http.server for dev server"* is refused, because the stack is matched as one string and any excluded marker wins. No keyword rule fixes this — whether Flask is the architecture or an optional dev server isn't information keywords carry. The fix is having the planner label its own plan (`{"language": "python", "kind": "cli"}`) and doing exact lookup; it is designed but not built.
+- **Stack choice is the whole remaining gap** in end-to-end success, and it is **unstable run to run** for the hosted models: for identical input, Sonnet chose Python twice out of four runs. Single-run numbers are samples, not measurements.
+
+**Planning**
+
+- **Depth is the model's judgement, not a setting.** `--max-rounds` caps the loop rather than driving it. Measured over 20 ideas: the local 8B model asked a median of 5 rounds and produced 14 steps; both Claude models asked 2 and produced 30–34. More questions does not mean a deeper plan.
+- The plan's shape is stated **twice** — as prose in the planning instruction and as a JSON schema — so the two can drift.
+- The planner's token budget is a **soft, forward-looking cap**: it bounds the next round, not the current one, so usage can overshoot by up to a turn. It resends its instruction each round; **prompt caching** is not applied yet.
+- **Tool-calling is unsupported on Ollama** by design (it degrades to text-only), so the agent loop stays Anthropic-first. The agent loop itself is infrastructure — the CLI never invokes it.
+
+**Testing and errors**
+
+- **Three failure paths still surface as `Unexpected error`** through a catch-all: a missing template, stdin running out mid-questioning, and filesystem errors during scaffolding. Each deserves a typed clause naming the cause.
+- **The offline Anthropic tests stub the SDK module**, so they would pass even if the installed SDK stopped accepting the `output_config` parameter. That gap is caught only by the live opt-in smoke test.
+- **Nothing verifies the generated app matches the plan.** Tier 1 proves the render is correct; nothing proves the app is right.
+
+**Not built**
+
+- The **live deploy** (Block 7) — deferred by decision, not oversight (D-050). The container image exists and is CI-verified, so the packaging half is done; nothing is hosted, and there is no IAM or TLS work to show.
+- Genesis is **not on PyPI** yet, so installing means cloning. Next on the list.
 
 ## Docs
 
