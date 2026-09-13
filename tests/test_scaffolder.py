@@ -1,4 +1,5 @@
 import hashlib
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -84,3 +85,15 @@ def test_scaffold_excludes_caches(tmp_path):
     out = scaffold(sample_plan(), tmp_path / "gen")
     junk = {".pytest_cache", ".ruff_cache", "__pycache__"}
     assert not [p for p in out.rglob("*") if junk & set(p.parts)]
+
+
+@pytest.mark.parametrize("raw,expected", [("Class", "p_class"), ("import", "p_import")])
+def test_normalize_avoids_python_keywords(raw, expected):
+    assert normalize(raw) == expected
+
+
+def test_summary_with_quotes_keeps_pyproject_valid(tmp_path):
+    plan = sample_plan()
+    plan.summary = 'A "quoted" tool.\nWith a newline.'
+    out = scaffold(plan, tmp_path / "gen")
+    tomllib.loads((out / "pyproject.toml").read_text())

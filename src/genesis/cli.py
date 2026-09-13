@@ -6,7 +6,7 @@ from genesis.core import cmd_create, cmd_plan, cmd_scaffold_file
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="genesis", description="Project scaffolding agent")
-    parser.add_argument("--version", action="version", version=version("genesis"))
+    parser.add_argument("--version", action="version", version=version("genesis-agent"))
 
     subparsers = parser.add_subparsers(dest="command", required=True)
     plan_parser = subparsers.add_parser("plan", help="create a structured plan from an idea")

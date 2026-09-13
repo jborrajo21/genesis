@@ -210,15 +210,26 @@ def test_cmd_scaffold_accepts_plan_with_no_phases(tmp_path):
     assert (tmp_path / "gen" / "PLAN.md").exists()
 
 
-def test_cmd_create_force_overwrites_without_prompting(fake_adapter, tmp_path, monkeypatch):
+def test_cmd_create_force_overwrites_a_previous_scaffold(fake_adapter, tmp_path, monkeypatch):
     fake_adapter(_ready(RUST))
     out = tmp_path / "gen"
     out.mkdir()
+    (out / "PLAN.md").write_text("an earlier scaffold")
     (out / "OLD.txt").write_text("stale")
     monkeypatch.setattr("builtins.input", lambda *a: pytest.fail("--force must not prompt"))
     assert cmd_create("idea", str(out), "anthropic", "m", None, True, 6, 10000) == 0
     assert not (out / "OLD.txt").exists()
     assert (out / "PLAN.md").exists()
+
+
+def test_cmd_create_force_refuses_directory_genesis_did_not_create(fake_adapter, tmp_path, capsys):
+    fake_adapter(_ready(RUST))
+    out = tmp_path / "precious"
+    out.mkdir()
+    (out / "thesis.txt").write_text("irreplaceable")
+    assert cmd_create("idea", str(out), "anthropic", "m", None, True, 6, 10000) == 1
+    assert (out / "thesis.txt").read_text() == "irreplaceable"
+    assert "Refusing to delete" in capsys.readouterr().err
 
 
 def test_cmd_create_without_force_refuses_when_not_a_tty(

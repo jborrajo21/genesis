@@ -19,6 +19,7 @@ WORKDIR /app
 # generated repo actually builds (D-032).
 COPY pyproject.toml ./
 COPY src/ ./src/
+COPY README.md ./
 
 # A plain non-editable install. This only works because the template lives
 # inside the package (D-054) and therefore ships in the wheel; before that fix

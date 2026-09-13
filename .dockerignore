@@ -32,7 +32,6 @@ evals/results/
 # depends on them would rebuild on every doc edit.
 docs/
 CLAUDE.md
-README.md
 DECISIONS.md
 .claude/
 

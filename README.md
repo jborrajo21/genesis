@@ -20,12 +20,16 @@ idea → clarifying questions → structured Plan → scaffolded repo (installs 
 ## Quick start
 
 ```bash
-pip install -e ".[dev,anthropic]"
+pip install "genesis-agent[anthropic]"
 genesis create "a cli todo app" ~/my-todo
 ```
 
-Genesis asks a few clarifying questions, plans, scaffolds the repo, then installs it in a fresh
-venv and runs its tests — so you know it works before you open it.
+Installs as **`genesis-agent`** (the name `genesis` was taken on PyPI); imports and runs as
+`genesis`. Drop the `[anthropic]` extra if you only plan to use a local model via Ollama.
+
+Genesis asks a few clarifying questions, plans, scaffolds the repo, then proves it works — in a
+throwaway virtualenv it installs the result, runs its command, runs its tests, and deletes the
+virtualenv again. What you get is the project, not the proof.
 
 Two backends, same commands:
 
@@ -234,12 +238,13 @@ would move the measured bottleneck.
 
 - **One model-agnostic seam.** The adapter Protocol is the boundary; the agent loop and planner depend on it, never on a provider SDK. Swap the model by swapping one class.
 - **Testable offline.** A scripted `FakeAdapter` drives the agent loop and planner in tests, and the Ollama adapter is tested against a patched HTTP layer — no network, no keys, no spend. Live tests exist but skip automatically without credentials or a local server, so CI stays secret-free and deterministic.
-- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](DECISIONS.md) with constraint-based reasoning (D-001 … D-065 so far) — architecture, dependencies, trade-offs, and accepted costs.
+- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](DECISIONS.md) with constraint-based reasoning (D-001 … D-068 so far) — architecture, dependencies, trade-offs, and accepted costs.
 - **Minimalism as policy.** Every config line and schema field is generation + eval surface, so surface is added only when a constraint demands it.
 
-## Run it
+## Working on Genesis itself
 
 ```bash
+git clone https://github.com/jborrajo21/genesis && cd genesis
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"      # add the anthropic extra for live use: ".[dev,anthropic]"
 pytest                        # offline suite — no API key needed
@@ -277,9 +282,12 @@ Live tests are opt-in: the Anthropic smoke test runs only when `ANTHROPIC_API_KE
 **Not built**
 
 - The **live deploy** (Block 7) — deferred by decision, not oversight (D-050). The container image exists and is CI-verified, so the packaging half is done; nothing is hosted, and there is no IAM or TLS work to show.
-- Genesis is **not on PyPI** yet, so installing means cloning. Next on the list.
 
 ## Docs
 
 - [`EVAL.md`](EVAL.md) — full eval results: two runs, three models, scored predictions, findings, and limitations.
 - [`DECISIONS.md`](DECISIONS.md) — the decision log (every non-trivial choice, with constraint-based reasoning).
+
+## Licence
+
+[MIT](LICENSE).

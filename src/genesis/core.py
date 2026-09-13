@@ -126,6 +126,12 @@ def cmd_scaffold(plan_json: str, output_dir: str | None, force: bool) -> int:
             if not force:
                 print_error(f"{output_dir} already exists. Use --force to overwrite.")
                 return 1
+            if any(target_path.iterdir()) and not (target_path / "PLAN.md").exists():
+                print_error(
+                    f"{output_dir} is not empty and was not created by Genesis. "
+                    "Refusing to delete it — remove it yourself or choose another directory."
+                )
+                return 1
             shutil.rmtree(target_path)
 
         repo_dir = scaffold(plan, target_path)

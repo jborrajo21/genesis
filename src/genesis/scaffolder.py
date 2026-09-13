@@ -1,3 +1,5 @@
+import json
+import keyword
 import os
 import re
 import shutil
@@ -29,7 +31,7 @@ def normalize(name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
     if not slug:
         return _DEFAULT_NAME
-    if slug[0].isdigit():
+    if slug[0].isdigit() or keyword.iskeyword(slug) or not slug.isidentifier():
         slug = "p_" + slug
     return slug
 
@@ -56,7 +58,9 @@ def scaffold(plan: Plan, target_dir: Path) -> Path:
     (target_dir / "src" / template.package).rename(target_dir / "src" / name)
 
     pyproject = target_dir / "pyproject.toml"
-    pyproject.write_text(pyproject.read_text().replace(template.description, plan.summary))
+    pyproject.write_text(
+        pyproject.read_text().replace(f'"{template.description}"', json.dumps(plan.summary))
+    )
     (target_dir / "PLAN.md").write_text(_render_plan_md(plan))
 
     return target_dir
