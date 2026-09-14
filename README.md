@@ -112,7 +112,7 @@ Two more results worth the click: constraining output to a JSON schema took host
 from 90% to **100% — zero parse failures in 60 plans**; and `supported` turned out **not to be a
 stable property of an idea** — for identical input, Sonnet chose Python twice out of four runs.
 
-**[Full results, methodology, scored predictions, and what these numbers don't say → `EVAL.md`](EVAL.md)**
+**[Full results, methodology, scored predictions, and what these numbers don't say → `EVAL.md`](https://github.com/jborrajo21/genesis/blob/main/EVAL.md)**
 — including the bug this eval found in our own classifier, and a criticism of the eval's own idea set.
 
 ## Using the CLI
@@ -200,7 +200,7 @@ $ ollama serve
 $ genesis create "a csv to json converter" ./out --adapter ollama --model llama3.1
 ```
 
-No API key, no token cost. Plan quality tracks the local model — see [`EVAL.md`](EVAL.md), where
+No API key, no token cost. Plan quality tracks the local model — see [`EVAL.md`](https://github.com/jborrajo21/genesis/blob/main/EVAL.md), where
 the local model turns out to win end-to-end for a reason worth reading. Point Genesis at a remote
 Ollama with `GENESIS_OLLAMA_BASE_URL`. If the server is not running, Genesis says so and tells you
 how to start it rather than failing with a stack trace.
@@ -240,7 +240,7 @@ to start it.
 | — | CLI (`plan`/`scaffold`/`create`) + Ollama adapter — added outside the original 8 | ✅ |
 | — | Three-tier eval — CI gates, pipeline sweep across three models, structural rubric | ✅ |
 | — | Container image, CI-verified by scaffolding inside it | ✅ |
-| 7 | Live deploy — [deliberately deferred](DECISIONS.md) to mid-October (D-050) | ⏸️ |
+| 7 | Live deploy — [deliberately deferred](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) to mid-October (D-050) | ⏸️ |
 | 8 | README + eval numbers + polish | ✅ |
 
 **Next, in order:** publish to PyPI → measure a 1–2B local model as a fourth rung on the eval
@@ -251,7 +251,7 @@ would move the measured bottleneck.
 
 - **One model-agnostic seam.** The adapter Protocol is the boundary; the agent loop and planner depend on it, never on a provider SDK. Swap the model by swapping one class.
 - **Testable offline.** A scripted `FakeAdapter` drives the agent loop and planner in tests, and the Ollama adapter is tested against a patched HTTP layer — no network, no keys, no spend. Live tests exist but skip automatically without credentials or a local server, so CI stays secret-free and deterministic.
-- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](DECISIONS.md) with constraint-based reasoning (D-001 … D-068 so far) — architecture, dependencies, trade-offs, and accepted costs.
+- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) with constraint-based reasoning (D-001 … D-068 so far) — architecture, dependencies, trade-offs, and accepted costs.
 - **Minimalism as policy.** Every config line and schema field is generation + eval surface, so surface is added only when a constraint demands it.
 
 ## Working on Genesis itself
@@ -298,10 +298,10 @@ Live tests are opt-in: the Anthropic smoke test runs only when `ANTHROPIC_API_KE
 
 ## Docs
 
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to run it, how the project is organised, and why external pull requests cannot be merged yet.
-- [`EVAL.md`](EVAL.md) — full eval results: two runs, three models, scored predictions, findings, and limitations.
-- [`DECISIONS.md`](DECISIONS.md) — the decision log (every non-trivial choice, with constraint-based reasoning).
+- [`CONTRIBUTING.md`](https://github.com/jborrajo21/genesis/blob/main/CONTRIBUTING.md) — how to run it, how the project is organised, and why external pull requests cannot be merged yet.
+- [`EVAL.md`](https://github.com/jborrajo21/genesis/blob/main/EVAL.md) — full eval results: two runs, three models, scored predictions, findings, and limitations.
+- [`DECISIONS.md`](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) — the decision log (every non-trivial choice, with constraint-based reasoning).
 
 ## Licence
 
-[MIT](LICENSE).
+[MIT](https://github.com/jborrajo21/genesis/blob/main/LICENSE).
