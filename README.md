@@ -3,6 +3,8 @@
 An AI agent that turns a project idea into a **structured, buildable plan** and a **scaffolded starter repo that installs and passes its own tests** — built **model-agnostic** and designed for **engineering rigour over vibe-coding**. Every architectural choice is written down in a decision log, every component is tested offline without touching a live API, and CI stays green.
 
 ![CI](https://github.com/jborrajo21/genesis/actions/workflows/ci.yml/badge.svg)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/jborrajo21/genesis/blob/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/genesis-agent.svg)](https://pypi.org/project/genesis-agent/)
 
 > **Status: in active development.** Everything works end to end — CLI, two model backends, a deterministic scaffolder gated in CI, and a three-tier eval measured across three models ([results](#eval-numbers)). The one thing missing is a **live deploy**, which is scheduled rather than skipped: targeted for mid-October, timed so the URL is alive through the winter rather than lapsing before anyone looks (D-050). See the [roadmap](#roadmap).
 
@@ -43,8 +45,75 @@ Two backends, same commands:
 
 Or run the steps separately — `genesis plan "idea" --output plan.json`, then
 `genesis scaffold plan.json ./out`. `scaffold` takes any valid plan JSON, including one you wrote
-yourself. Every argument is prompted for interactively if you omit it; `--help` lists the rest.
+yourself. Every argument is prompted for interactively if you omit it.
 
+**→ [Full command reference](#using-the-cli)** — all three commands, every flag, worked examples,
+running it in a container, and exit codes.
+
+### Credentials
+
+**Genesis never stores, caches or transmits your API key anywhere except to the provider you chose.**
+It holds no config file and reads no `.env` — the Anthropic SDK resolves credentials itself, from
+`ANTHROPIC_API_KEY` or an `ant auth login` profile, and Genesis passes nothing of its own.
+
+The local path needs no credential at all: `--adapter ollama` talks to a server on your own machine,
+and `genesis scaffold` needs no model whatsoever, so plans you already have cost nothing to build.
+
+## Built so far
+
+- **CLI** — `plan`, `scaffold`, `create`. Every positional argument is optional and prompted for when omitted, so it works interactively or scripted. Details in [Using the CLI](#using-the-cli).
+- **Python CLI template** — a minimal, correct reference repo (packaging, tests, lint, CI) that the scaffolder renders. Hand-built first, so its generated output is checked against something understood line by line.
+- **Model-agnostic adapter** — a `ModelAdapter` Protocol hiding the provider behind one `complete()` call, carrying tool definitions, a provider-neutral stop reason, and an optional response schema. Two adapters implement it: Anthropic (hosted) and Ollama (local). Nothing outside them imports a provider SDK, so models are swappable and the rest of the system is testable offline against a `FakeAdapter`.
+- **Ollama adapter — free, local, no API key** — talks to Ollama's OpenAI-compatible endpoint over stdlib `urllib`, adding no dependency. Planning runs on your own machine at zero token cost.
+- **Schema-constrained planning** — the planner sends a JSON schema and **both** adapters constrain decoding to it. That turned out to be decisive: it took hosted plan validity from 90% to 100%, and eliminated a failure mode where valid JSON followed by prose was rejected.
+- **Planner** — an adaptive, bounded loop: each round the model decides whether to ask more or plan, capped so it can never interrogate forever. A stack it can't scaffold still gets a plan plus a manual checklist rather than a refusal.
+- **Scaffolder** — deterministic, no LLM and no network beyond `pip`. Copies the template, renames the package across every coupled site, ships the plan as `PLAN.md`, and **verifies it installs, that its command actually runs, and that its tests pass** — in a throwaway virtualenv that is then removed, so the repo you get contains only its own files (36 KB, not 47 MB). CI runs that check on every push, so a broken render fails the build. Which template applies is a registry lookup on the recommended stack, so "unsupported" is the absence of a match rather than a maintained denylist.
+- **Agent loop** — a hand-built tool-using loop with guardrails (`max_turns`, a token budget) and per-run telemetry. Importable and tested (`from genesis.agent import Agent`), but the CLI does not use it — it is infrastructure for later work, not a dormant stub.
+- **Container image** — `python:3.11-slim`, non-root, no compiled dependencies and no `apt-get` layer. CI builds it every push and proves a repo scaffolded *inside the image* still installs and passes its tests.
+- **A three-tier eval** — deterministic CI gates, a measured pipeline success rate across a local 8B model, Haiku and Sonnet, and a structural rubric over the saved plans. Every run is persisted, so it can be re-analysed without re-spending it. [The numbers, and what they don't say →](#eval-numbers)
+
+## Eval numbers
+
+Genesis is evaluated in three tiers, because the questions are different kinds and cannot share a
+method: what gates CI must be deterministic and free, what measures a language model can be neither.
+
+| Tier | Asks | Runs | Status |
+|---|---|---|---|
+| **1 — Gates** | Does the render produce a valid, installable, test-passing repo? Byte-identical run to run? Does the CLI fail gracefully on junk? | CI, every push | ✅ |
+| **2 — Pipeline success rate** | Across diverse ideas, how many become a valid plan, get classified correctly, and build green — and how does that change with model capability? | On demand | ✅ two runs |
+| **3 — Plan quality** | Are the plans structurally sound? | On demand | ✅ structural half only |
+
+**Tier 1**, the CI gate: ten renders under project names chosen to stress name normalisation —
+`Todo App`, `7guis`, `!!!`, `Ünicode Tool` — each installed into a fresh venv with its own tests
+run. **10/10 installed, 10/10 passed, 5.1 s mean.** Two of them run on every push, so a rendered
+repo that cannot install or pass its tests fails the build.
+
+**Tier 2**, 20 ideas × 3 models, twice (Sept 2 and Sept 12, 2026):
+
+| Model | Plan valid | Idea → buildable repo | Median tokens |
+|---|---|---|---|
+| gemma4:latest *(local 8B, free)* | 100% | **90%** (9/10) | 4,667 |
+| claude-haiku-4-5 | 100% | 70% (7/10) | 5,298 |
+| claude-sonnet-5 | 100% | 70% (7/10) | 3,210 |
+
+### The result we did not expect
+
+**The free local model beat both hosted models end-to-end, and success was inversely correlated
+with capability.** Not "the small model is better" — the mechanism is in the failures. Genesis
+scaffolds *Python CLIs only*, and the stronger models reached outside Python for exactly the tasks
+where another ecosystem is idiomatic: Node with Commander for a CLI todo app, TypeScript for a git
+commit linter, JS tooling for a static site generator. Those are defensible engineering calls this
+pipeline cannot consume. The 8B model doesn't know the JS ecosystem and defaults to Python.
+
+**Capability correlates with ecosystem awareness, and ecosystem awareness anti-correlates with
+fitting this pipeline.** The constraint being violated is ours, not the model's.
+
+Two more results worth the click: constraining output to a JSON schema took hosted plan validity
+from 90% to **100% — zero parse failures in 60 plans**; and `supported` turned out **not to be a
+stable property of an idea** — for identical input, Sonnet chose Python twice out of four runs.
+
+**[Full results, methodology, scored predictions, and what these numbers don't say → `EVAL.md`](EVAL.md)**
+— including the bug this eval found in our own classifier, and a criticism of the eval's own idea set.
 
 ## Using the CLI
 
@@ -158,62 +227,6 @@ so Genesis can be deployed, not so it can be installed.
 line to stderr — a missing plan key names the key; an unreachable Ollama server names the command
 to start it.
 
-## Built so far
-
-- **CLI** — `plan`, `scaffold`, `create`. Every positional argument is optional and prompted for when omitted, so it works interactively or scripted. Details in [Using the CLI](#using-the-cli).
-- **Python CLI template** — a minimal, correct reference repo (packaging, tests, lint, CI) that the scaffolder renders. Hand-built first, so its generated output is checked against something understood line by line.
-- **Model-agnostic adapter** — a `ModelAdapter` Protocol hiding the provider behind one `complete()` call, carrying tool definitions, a provider-neutral stop reason, and an optional response schema. Two adapters implement it: Anthropic (hosted) and Ollama (local). Nothing outside them imports a provider SDK, so models are swappable and the rest of the system is testable offline against a `FakeAdapter`.
-- **Ollama adapter — free, local, no API key** — talks to Ollama's OpenAI-compatible endpoint over stdlib `urllib`, adding no dependency. Planning runs on your own machine at zero token cost.
-- **Schema-constrained planning** — the planner sends a JSON schema and **both** adapters constrain decoding to it. That turned out to be decisive: it took hosted plan validity from 90% to 100%, and eliminated a failure mode where valid JSON followed by prose was rejected.
-- **Planner** — an adaptive, bounded loop: each round the model decides whether to ask more or plan, capped so it can never interrogate forever. A stack it can't scaffold still gets a plan plus a manual checklist rather than a refusal.
-- **Scaffolder** — deterministic, no LLM and no network beyond `pip`. Copies the template, renames the package across every coupled site, ships the plan as `PLAN.md`, and **verifies it installs, that its command actually runs, and that its tests pass** — in a throwaway virtualenv that is then removed, so the repo you get contains only its own files (36 KB, not 47 MB). CI runs that check on every push, so a broken render fails the build. Which template applies is a registry lookup on the recommended stack, so "unsupported" is the absence of a match rather than a maintained denylist.
-- **Agent loop** — a hand-built tool-using loop with guardrails (`max_turns`, a token budget) and per-run telemetry. Infrastructure for later work; the CLI does not use it.
-- **Container image** — `python:3.11-slim`, non-root, no compiled dependencies and no `apt-get` layer. CI builds it every push and proves a repo scaffolded *inside the image* still installs and passes its tests.
-- **A three-tier eval** — deterministic CI gates, a measured pipeline success rate across a local 8B model, Haiku and Sonnet, and a structural rubric over the saved plans. Every run is persisted, so it can be re-analysed without re-spending it. [The numbers, and what they don't say →](#eval-numbers)
-
-## Eval numbers
-
-Genesis is evaluated in three tiers, because the questions are different kinds and cannot share a
-method: what gates CI must be deterministic and free, what measures a language model can be neither.
-
-| Tier | Asks | Runs | Status |
-|---|---|---|---|
-| **1 — Gates** | Does the render produce a valid, installable, test-passing repo? Byte-identical run to run? Does the CLI fail gracefully on junk? | CI, every push | ✅ |
-| **2 — Pipeline success rate** | Across diverse ideas, how many become a valid plan, get classified correctly, and build green — and how does that change with model capability? | On demand | ✅ two runs |
-| **3 — Plan quality** | Are the plans structurally sound? | On demand | ✅ structural half only |
-
-**Tier 1**, the CI gate: ten renders under project names chosen to stress name normalisation —
-`Todo App`, `7guis`, `!!!`, `Ünicode Tool` — each installed into a fresh venv with its own tests
-run. **10/10 installed, 10/10 passed, 5.1 s mean.** Two of them run on every push, so a rendered
-repo that cannot install or pass its tests fails the build.
-
-**Tier 2**, 20 ideas × 3 models, twice (Sept 2 and Sept 12, 2026):
-
-| Model | Plan valid | Idea → buildable repo | Median tokens |
-|---|---|---|---|
-| gemma4:latest *(local 8B, free)* | 100% | **90%** (9/10) | 4,667 |
-| claude-haiku-4-5 | 100% | 70% (7/10) | 5,298 |
-| claude-sonnet-5 | 100% | 70% (7/10) | 3,210 |
-
-### The result we did not expect
-
-**The free local model beat both hosted models end-to-end, and success was inversely correlated
-with capability.** Not "the small model is better" — the mechanism is in the failures. Genesis
-scaffolds *Python CLIs only*, and the stronger models reached outside Python for exactly the tasks
-where another ecosystem is idiomatic: Node with Commander for a CLI todo app, TypeScript for a git
-commit linter, JS tooling for a static site generator. Those are defensible engineering calls this
-pipeline cannot consume. The 8B model doesn't know the JS ecosystem and defaults to Python.
-
-**Capability correlates with ecosystem awareness, and ecosystem awareness anti-correlates with
-fitting this pipeline.** The constraint being violated is ours, not the model's.
-
-Two more results worth the click: constraining output to a JSON schema took hosted plan validity
-from 90% to **100% — zero parse failures in 60 plans**; and `supported` turned out **not to be a
-stable property of an idea** — for identical input, Sonnet chose Python twice out of four runs.
-
-**[Full results, methodology, scored predictions, and what these numbers don't say → `EVAL.md`](EVAL.md)**
-— including the bug this eval found in our own classifier, and a criticism of the eval's own idea set.
-
 ## Roadmap
 
 | Block | Deliverable | Status |
@@ -285,6 +298,7 @@ Live tests are opt-in: the Anthropic smoke test runs only when `ANTHROPIC_API_KE
 
 ## Docs
 
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to run it, how the project is organised, and why external pull requests cannot be merged yet.
 - [`EVAL.md`](EVAL.md) — full eval results: two runs, three models, scored predictions, findings, and limitations.
 - [`DECISIONS.md`](DECISIONS.md) — the decision log (every non-trivial choice, with constraint-based reasoning).
 
