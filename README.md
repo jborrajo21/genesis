@@ -242,16 +242,17 @@ to start it.
 | — | Container image, CI-verified by scaffolding inside it | ✅ |
 | 7 | Live deploy — [deliberately deferred](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) to mid-October (D-050) | ⏸️ |
 | 8 | README + eval numbers + polish | ✅ |
+| — | Published to PyPI as [`genesis-agent`](https://pypi.org/project/genesis-agent/) | ✅ |
 
-**Next, in order:** publish to PyPI → measure a 1–2B local model as a fourth rung on the eval
-ladder → the deploy → a template registry with a second template, which is the only thing that
-would move the measured bottleneck.
+**Next, in order:** measure a 1–2B local model as a fourth rung on the eval ladder → the deploy →
+a template registry with a second template, which is the only thing that would move the measured
+bottleneck.
 
 ## Architecture & practices
 
 - **One model-agnostic seam.** The adapter Protocol is the boundary; the agent loop and planner depend on it, never on a provider SDK. Swap the model by swapping one class.
 - **Testable offline.** A scripted `FakeAdapter` drives the agent loop and planner in tests, and the Ollama adapter is tested against a patched HTTP layer — no network, no keys, no spend. Live tests exist but skip automatically without credentials or a local server, so CI stays secret-free and deterministic.
-- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) with constraint-based reasoning (D-001 … D-068 so far) — architecture, dependencies, trade-offs, and accepted costs.
+- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) with constraint-based reasoning (D-001 … D-069 so far) — architecture, dependencies, trade-offs, and accepted costs.
 - **Minimalism as policy.** Every config line and schema field is generation + eval surface, so surface is added only when a constraint demands it.
 
 ## Working on Genesis itself
