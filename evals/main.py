@@ -10,6 +10,8 @@ MODELS = [
     ("anthropic", "claude-haiku-4-5"),
     ("anthropic", "claude-sonnet-5"),
     ("ollama", "gemma4:latest"),
+    # ("ollama", "llama3.2:1b"),
+    # ("ollama", "qwen2.5:1.5b"),
 ]
 
 REPEAT_IDEA_INDEXES = (0, 10)  # one expected-supported, one expected-unsupported

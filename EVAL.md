@@ -89,6 +89,39 @@ Medians for rounds, phases, steps, tokens and seconds. `Built green` counts only
 
 Validity was the one axis where the *least* capable model led, purely because it was the only one being constrained.
 
+### A defect the small models found, and the larger ones hid
+
+The Sept 14 run of two 1–1.5B models produced 11 failures, and **7 were ours.** `_PLAN_SCHEMA`
+declared `status` as `{"type": "string"}` — any string — when the contract has exactly two legal
+values. What kept output valid was the *prose* in the planning instruction, which shows both
+shapes. Instruction-following is a capability, so the guarantee held only while the models were
+capable enough:
+
+| | recorded runs | invalid `status` |
+|---|---|---|
+| claude-haiku-4-5 | 52 | 0 |
+| claude-sonnet-5 | 52 | 0 |
+| gemma4:latest | 52 | 0 |
+| llama3.2:1b | 26 | 3 |
+| qwen2.5:1.5b | 26 | 4 |
+
+The small models emitted `plan`, `neutral`, and `need-info` — the last being correct apart from a
+hyphen, rejected on punctuation by a contract the grammar could have enforced outright. Fixed by
+adding `enum: ["need_info", "ready"]` (D-071), which both backends accept.
+
+**This is the fourth defect in this project that was invisible because the observed population
+never exercised it**, alongside the Flask veto, a substring match treating `guide` as `gui`, and a
+quoted plan summary producing invalid TOML. The pattern is worth naming: the eval corpus is output
+from capable models, and every one of those bugs was found by something outside that population —
+small models, hand-written input, or adversarial names. **A corpus proves what it covers, and
+hides what it does not.**
+
+Only the small models were re-measured after the fix. D-063's replay method does not apply to a
+schema change — it affects *generation*, not parsing, so there is nothing recorded to replay — so
+the judgment rests on the table above: the constraint never binds for the larger three, and
+re-running them would produce differences indistinguishable from the run-to-run variance already
+documented.
+
 ### Classification, decomposed
 
 One accuracy number would conflate three questions with three different owners.
@@ -116,6 +149,70 @@ One accuracy number would conflate three questions with three different owners.
 The first two columns exclude plans that failed to parse (a failed plan has no stack to inspect). The third deliberately does not — a plan that never parsed produced no repo, and excluding it would reward a model for failing early.
 
 Both hosted models gained exactly **one idea** from the schema fix. The gap to the local model narrowed from 30 points to 20 — and is now *entirely* stack choice, with the parse-failure confound removed.
+
+### Fourth rung — can a free hosted tier work? (Sept 14)
+
+**This run existed to answer a deployment question, not a curiosity one:** the planned hosted
+service offers a keyless `/scaffold` endpoint and a bring-your-own-key `/plan`. A third tier — free
+planning, no key at all — is only viable if a model small enough to run in a Lambda container is
+good enough to be worth offering. Two candidates in the 1–1.5B band, on the same 20 ideas, judged
+against thresholds **fixed before the run** in `docs/phase10-deploy.md`.
+
+| Model | Plan valid | Idea → buildable | Median latency | Median tokens |
+|---|---|---|---|---|
+| llama3.2:1b | 90% | 20% (2/10) | 16 s | 5,084 |
+| qwen2.5:1.5b | **100%** | 50% (5/10) | 12 s | 4,090 |
+| *threshold* | *≥95%* | *≥60%* | *≤60s local* | — |
+
+**Verdict: the free tier does not ship.** Both models miss the binding metric. qwen2.5 is close —
+50% against 60% — and that closeness is exactly why the threshold was fixed in advance: moving it
+now to admit a model that missed would make every future threshold meaningless.
+
+The deploy ships **Tier A (keyless `/scaffold`) and Tier B (BYOK `/plan`) only** (D-072). Tier A
+already covers the free clickable case, and covers it better: a prepared plan through the keyless
+endpoint returns a verified repo instantly and every time, against a coin-flip result after a
+minute of CPU inference. Revival conditions, in order: close the Flask veto, measure one timed
+Lambda invocation, re-test against these same thresholds.
+
+Two things belong beside that verdict rather than buried under it:
+
+- **Three of qwen2.5's five losses trace to the open Flask veto** (finding 1 below). Whether closing
+  that would lift it over 60% is genuinely unknown — a planner-emitted label might classify those
+  plans as CLIs and scaffold them, or might not, since the plans are poor either way
+  (`['Python 3', 'Pillow', 'DuckDB', 'MySQL', 'Flask']` for a photo deduplicator). So this is
+  *fails now, re-testable after that fix*, not *fails permanently*.
+- **The latency figures are a floor, not an estimate.** They were measured on Apple Silicon with GPU
+  acceleration; Lambda is CPU-only, plausibly 3–4× slower, plus a cold start loading the model from
+  the image. A 12-second local plan could be a minute in production — so even the model that passed
+  on latency has not really been tested on the hardware that matters.
+
+#### Structural quality drops sharply at this size
+
+| Check | llama3.2:1b | qwen2.5:1.5b | *gemma4 (8B)* |
+|---|---|---|---|
+| all fields present | 94% | 100% | *100%* |
+| 2+ phases | 83% | 95% | *100%* |
+| every phase has steps | 89% | 100% | *100%* |
+| steps are substantive | 83% | 75% | *100%* |
+| unsupported plan has a checklist | 81% | 93% | *82%* |
+
+The floor checks that every larger model passed at 100% start failing here — plans with one phase,
+phases with no steps, steps too short to act on. **This is where "the weaker model wins" stops
+being true.** The inverse correlation between capability and pipeline fit holds down to 8B and
+breaks below it: these models are not usefully ignorant of the JS ecosystem, they are producing
+worse plans in every measurable way, and llama3.2 recommends Python for only 25% of the ideas where
+it is the obvious answer.
+
+#### One more under-constraint, found the same way
+
+```
+PlannerError: malformed 'ready' response, missing key: 'plan'
+```
+
+The schema's `required` is `["status"]` alone, because `questions` and `plan` are alternatives — so
+`{"status": "ready"}` with no plan is **schema-valid and contract-invalid**. Expressing *"if ready,
+then plan is required"* needs `if`/`then` or `oneOf`, whose grammar support varies by backend, so
+this is documented rather than closed. Fifth defect surfaced by this population.
 
 ### Accuracy by expectation — Sept 12
 
@@ -204,8 +301,9 @@ H1 inverting is what produced the Sept 12 re-run.
    **No keyword rule fixes this** — whether Flask is the architecture or an optional dev server is not information keywords carry. A positional rule (markers only disqualify in the first element or two, which would work on this data) was considered and **rejected as fitting the heuristic to this eval set**. The real fix is having the planner label its own plan — `{"language": "python", "kind": "cli"}` as one more field in a completion that already happens, then exact lookup — which is also what multiple templates will need. Design: `docs/template-registry.md`.
 
    A **related** defect *was* fixed: markers matched as substrings, so `gui` matched "guide" and `ios` matched "Axios". Across 157 recorded plans this caused zero misclassifications — every accidental hit landed on a plan unsupported for other reasons — but a Python plan mentioning a *guide* would have been silently refused. Now matched on word boundaries, verified to change none of the 157 recorded outcomes.
-2. **The end-to-end metric excluded parse failures.** Until corrected, plans that failed to parse were dropped from the denominator — rewarding a model for failing early. Haiku's Sept 2 figure read 75% (6/8) where the honest number is 60% (6/10). Fixed; both runs above use the corrected denominator.
-3. **`_extract_json` rejected valid model output** followed by prose, causing two of five Sept 2 failures and reported to users as "model did not return valid JSON" — blaming the model for our bug. Closed as a side effect of schema-constrained decoding.
+2. **`_PLAN_SCHEMA` under-constrained `status` — fixed (D-071).** Declared as any string when the contract has two legal values, so validity rested on the prose instruction rather than the grammar. Invisible across 156 runs of capable models; 7 failures in 52 runs of 1–1.5B ones. See [above](#a-defect-the-small-models-found-and-the-larger-ones-hid).
+3. **The end-to-end metric excluded parse failures.** Until corrected, plans that failed to parse were dropped from the denominator — rewarding a model for failing early. Haiku's Sept 2 figure read 75% (6/8) where the honest number is 60% (6/10). Fixed; both runs above use the corrected denominator.
+4. **`_extract_json` rejected valid model output** followed by prose, causing two of five Sept 2 failures and reported to users as "model did not return valid JSON" — blaming the model for our bug. Closed as a side effect of schema-constrained decoding.
 
 ### A criticism of this eval
 

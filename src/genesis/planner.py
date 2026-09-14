@@ -45,7 +45,7 @@ exactly what to do. Do not include a "supported" field; that is determined elsew
 _PLAN_SCHEMA = {
     "type": "object",
     "properties": {
-        "status": {"type": "string"},
+        "status": {"type": "string", "enum": ["need_info", "ready"]},
         "questions": {"type": "array", "items": {"type": "string"}},
         "plan": {
             "type": "object",
