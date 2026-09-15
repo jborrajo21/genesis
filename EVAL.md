@@ -156,7 +156,7 @@ Both hosted models gained exactly **one idea** from the schema fix. The gap to t
 service offers a keyless `/scaffold` endpoint and a bring-your-own-key `/plan`. A third tier — free
 planning, no key at all — is only viable if a model small enough to run in a Lambda container is
 good enough to be worth offering. Two candidates in the 1–1.5B band, on the same 20 ideas, judged
-against thresholds **fixed before the run** in `docs/phase10-deploy.md`.
+against thresholds **fixed before the run**, shown in the table below.
 
 | Model | Plan valid | Idea → buildable | Median latency | Median tokens |
 |---|---|---|---|---|
@@ -298,7 +298,7 @@ H1 inverting is what produced the Sept 12 re-run.
 
 1. **Stack classification vetoes on any marker, anywhere in the stack — still open.** Haiku's plan for *a static site generator from markdown* was `['Python 3.10+', 'markdown2 or python-markdown', 'Jinja2 for templating', 'watchdog for file monitoring', 'Flask or http.server for dev server', 'YAML frontmatter for metadata']`. Five elements say Python CLI; one mentions Flask as an *optional* dev server. The stack is joined into one string and any marker vetoes it, so one incidental word rejects a scaffoldable plan.
 
-   **No keyword rule fixes this** — whether Flask is the architecture or an optional dev server is not information keywords carry. A positional rule (markers only disqualify in the first element or two, which would work on this data) was considered and **rejected as fitting the heuristic to this eval set**. The real fix is having the planner label its own plan — `{"language": "python", "kind": "cli"}` as one more field in a completion that already happens, then exact lookup — which is also what multiple templates will need. Design: `docs/template-registry.md`.
+   **No keyword rule fixes this** — whether Flask is the architecture or an optional dev server is not information keywords carry. A positional rule (markers only disqualify in the first element or two, which would work on this data) was considered and **rejected as fitting the heuristic to this eval set**. The real fix is having the planner label its own plan — `{"language": "python", "kind": "cli"}` as one more field in a completion that already happens, then exact lookup — which is also what multiple templates will need, and is the reason this is listed as open rather than fixed: it is a schema and planner change, not a tweak to the classifier.
 
    A **related** defect *was* fixed: markers matched as substrings, so `gui` matched "guide" and `ios` matched "Axios". Across 157 recorded plans this caused zero misclassifications — every accidental hit landed on a plan unsupported for other reasons — but a Python plan mentioning a *guide* would have been silently refused. Now matched on word boundaries, verified to change none of the 157 recorded outcomes.
 2. **`_PLAN_SCHEMA` under-constrained `status` — fixed (D-071).** Declared as any string when the contract has two legal values, so validity rested on the prose instruction rather than the grammar. Invisible across 156 runs of capable models; 7 failures in 52 runs of 1–1.5B ones. See [above](#a-defect-the-small-models-found-and-the-larger-ones-hid).

@@ -21,13 +21,39 @@ idea → clarifying questions → structured Plan → scaffolded repo (installs 
 
 ## Quick start
 
+**From PyPI:**
+
 ```bash
 pip install "genesis-agent[anthropic]"
 genesis create "a cli todo app" ~/my-todo
 ```
 
-Installs as **`genesis-agent`** (the name `genesis` was taken on PyPI); imports and runs as
-`genesis`. Drop the `[anthropic]` extra if you only plan to use a local model via Ollama.
+**From a clone** — same CLI, installed from source instead of the index:
+
+```bash
+git clone https://github.com/jborrajo21/genesis && cd genesis
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[anthropic]"
+genesis create "a cli todo app" ~/my-todo
+```
+
+Cloning alone is not enough: the `genesis` command is a console script, so it exists only once the
+package is installed. `pip install -e .` is what puts it on your PATH, and `-e` means your edits
+take effect without reinstalling. Add `dev` (`".[dev,anthropic]"`) if you also want to run the
+tests.
+
+Two things worth knowing about the names and extras:
+
+- **Installs as `genesis-agent`, runs as `genesis`.** The name `genesis` was already taken on PyPI
+  by an unrelated project, so only the distribution name changed — the import name, the package
+  directory and the command are all still `genesis`. **`pip install genesis` gets you someone
+  else's library**, and because it also installs a package called `genesis`, it will collide with
+  this one in the same environment.
+- **`[anthropic]` is the only extra you need, and only for the hosted backend.** It pulls in the
+  Anthropic SDK, which is deliberately not a default dependency (D-017) so the offline suite and CI
+  run without it. **Using a local model via Ollama needs no extra and no Python dependency at all** —
+  that adapter talks HTTP through the standard library, so plain `pip install genesis-agent` is the
+  whole install. What Ollama needs is the Ollama server itself, running locally.
 
 Genesis asks a few clarifying questions, plans, scaffolds the repo, then proves it works — in a
 throwaway virtualenv it installs the result, runs its command, runs its tests, and deletes the
@@ -252,7 +278,7 @@ bottleneck.
 
 - **One model-agnostic seam.** The adapter Protocol is the boundary; the agent loop and planner depend on it, never on a provider SDK. Swap the model by swapping one class.
 - **Testable offline.** A scripted `FakeAdapter` drives the agent loop and planner in tests, and the Ollama adapter is tested against a patched HTTP layer — no network, no keys, no spend. Live tests exist but skip automatically without credentials or a local server, so CI stays secret-free and deterministic.
-- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) with constraint-based reasoning (D-001 … D-069 so far) — architecture, dependencies, trade-offs, and accepted costs.
+- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) with constraint-based reasoning (D-001 … D-072 so far) — architecture, dependencies, trade-offs, and accepted costs.
 - **Minimalism as policy.** Every config line and schema field is generation + eval surface, so surface is added only when a constraint demands it.
 
 ## Working on Genesis itself
@@ -299,7 +325,7 @@ Live tests are opt-in: the Anthropic smoke test runs only when `ANTHROPIC_API_KE
 
 ## Docs
 
-- [`CONTRIBUTING.md`](https://github.com/jborrajo21/genesis/blob/main/CONTRIBUTING.md) — how to run it, how the project is organised, and why external pull requests cannot be merged yet.
+- [`CONTRIBUTING.md`](https://github.com/jborrajo21/genesis/blob/main/CONTRIBUTING.md) — how to run it, how the project is organised, and how to contribute — pull requests are welcome under MIT with a `git commit -s` sign-off; there is no CLA.
 - [`EVAL.md`](https://github.com/jborrajo21/genesis/blob/main/EVAL.md) — full eval results: two runs, three models, scored predictions, findings, and limitations.
 - [`DECISIONS.md`](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) — the decision log (every non-trivial choice, with constraint-based reasoning).
 
