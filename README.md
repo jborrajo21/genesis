@@ -96,6 +96,7 @@ and `genesis scaffold` needs no model whatsoever, so plans you already have cost
 - **Scaffolder** — deterministic, no LLM and no network beyond `pip`. Copies the template, renames the package across every coupled site, ships the plan as `PLAN.md`, and **verifies it installs, that its command actually runs, and that its tests pass** — in a throwaway virtualenv that is then removed, so the repo you get contains only its own files (36 KB, not 47 MB). CI runs that check on every push, so a broken render fails the build. Which template applies is a registry lookup on the recommended stack, so "unsupported" is the absence of a match rather than a maintained denylist.
 - **Agent loop** — a hand-built tool-using loop with guardrails (`max_turns`, a token budget) and per-run telemetry. Importable and tested (`from genesis.agent import Agent`), but the CLI does not use it — it is infrastructure for later work, not a dormant stub.
 - **Container image** — `python:3.11-slim`, non-root, no compiled dependencies and no `apt-get` layer. CI builds it every push and proves a repo scaffolded *inside the image* still installs and passes its tests.
+- **Typed failures, top to bottom** — every deliberate failure raises a `GenesisError` subclass rather than leaking a stdlib exception, so a missing template names the reinstall, an exhausted stdin names the argument to pass, and Ctrl-C exits 130 instead of printing a traceback. The package ships a `py.typed` marker, and `mypy` runs in CI **against the real Anthropic SDK**, so a change to the SDK's parameters fails the build rather than reaching users.
 - **A three-tier eval** — deterministic CI gates, a measured pipeline success rate across a local 8B model, Haiku and Sonnet, and a structural rubric over the saved plans. Every run is persisted, so it can be re-analysed without re-spending it. [The numbers, and what they don't say →](#eval-numbers)
 
 ## Eval numbers
@@ -249,9 +250,10 @@ so Genesis can be deployed, not so it can be installed.
 
 ### Exit codes
 
-`0` success · `1` failure · `2` usage error from argument parsing. Failures print one actionable
-line to stderr — a missing plan key names the key; an unreachable Ollama server names the command
-to start it.
+`0` success · `1` failure · `2` usage error from argument parsing · `130` interrupted with Ctrl-C.
+Failures print one actionable line to stderr — a missing plan key names the key; an unreachable
+Ollama server names the command to start it; a prompt with no input left tells you to pass the
+value as an argument instead.
 
 ## Roadmap
 
@@ -270,15 +272,19 @@ to start it.
 | 8 | README + eval numbers + polish | ✅ |
 | — | Published to PyPI as [`genesis-agent`](https://pypi.org/project/genesis-agent/) | ✅ |
 
-**Next, in order:** measure a 1–2B local model as a fourth rung on the eval ladder → the deploy →
-a template registry with a second template, which is the only thing that would move the measured
-bottleneck.
+**Next, in order:** the live deploy → a template registry with a second template, which is the only
+thing that would move the measured bottleneck.
+
+The fourth rung on the eval ladder — a 1–2B local model, to see whether a free hosted planning tier
+was viable — was measured in September and **declined**: both candidates missed a threshold fixed
+before the run (D-072). The numbers are in [`EVAL.md`](https://github.com/jborrajo21/genesis/blob/main/EVAL.md); there is no free planning tier, and that is a
+measurement rather than an omission.
 
 ## Architecture & practices
 
 - **One model-agnostic seam.** The adapter Protocol is the boundary; the agent loop and planner depend on it, never on a provider SDK. Swap the model by swapping one class.
 - **Testable offline.** A scripted `FakeAdapter` drives the agent loop and planner in tests, and the Ollama adapter is tested against a patched HTTP layer — no network, no keys, no spend. Live tests exist but skip automatically without credentials or a local server, so CI stays secret-free and deterministic.
-- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) with constraint-based reasoning (D-001 … D-072 so far) — architecture, dependencies, trade-offs, and accepted costs.
+- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) with constraint-based reasoning (D-001 … D-079 so far) — architecture, dependencies, trade-offs, and accepted costs.
 - **Minimalism as policy.** Every config line and schema field is generation + eval surface, so surface is added only when a constraint demands it.
 
 ## Working on Genesis itself
@@ -289,6 +295,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"      # add the anthropic extra for live use: ".[dev,anthropic]"
 pytest                        # offline suite — no API key needed
 ruff check . && ruff format --check .
+mypy                          # checks the Anthropic call against the installed SDK
 ```
 
 Live tests are opt-in: the Anthropic smoke test runs only when `ANTHROPIC_API_KEY` is exported (D-018), and the Ollama one only when a local server with models is reachable. Both skip otherwise, so a bare `pytest` never spends tokens and CI stays secret-free. The CLI itself also authenticates from an `ant auth login` profile.
@@ -315,9 +322,9 @@ Live tests are opt-in: the Anthropic smoke test runs only when `ANTHROPIC_API_KE
 
 **Testing and errors**
 
-- **Three failure paths still surface as `Unexpected error`** through a catch-all: a missing template, stdin running out mid-questioning, and filesystem errors during scaffolding. Each deserves a typed clause naming the cause.
-- **The offline Anthropic tests stub the SDK module**, so they would pass even if the installed SDK stopped accepting the `output_config` parameter. That gap is caught only by the live opt-in smoke test.
 - **Nothing verifies the generated app matches the plan.** Tier 1 proves the render is correct; nothing proves the app is right.
+- **The planner's contract is enforced at runtime, not by the schema.** The schema cannot express *"if the status is `ready`, a plan must be present"* without `oneOf` or `if`/`then`, whose constrained-decoding support varies by backend. Genesis raises a typed error instead — the invalid response is caught rather than made unreachable.
+- **Plan fields are checked by shape, not exhaustively by type.** `steps` supplied as a string passes, because a string is iterable, and each character becomes a step — a cosmetically wrong `PLAN.md`, not a crash or a wrong repo.
 
 **Not built**
 
