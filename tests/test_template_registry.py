@@ -3,7 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from genesis.template_registry import select_template
+from genesis.errors import GenesisError
+from genesis.template_registry import PYTHON_CLI, select_template, template_dir
 
 RESULTS = Path(__file__).resolve().parent.parent / "evals" / "results"
 
@@ -52,3 +53,9 @@ def test_classifier_agrees_with_every_recorded_eval_plan():
 def test_select_template(stack, expected):
     template = select_template(stack)
     assert (template.name if template else None) == expected
+
+
+def test_template_dir_reports_a_missing_template(monkeypatch):
+    monkeypatch.setattr("genesis.template_registry._TEMPLATES_ROOT", Path("/nonexistent"))
+    with pytest.raises(GenesisError, match="force-reinstall"):
+        template_dir(PYTHON_CLI)

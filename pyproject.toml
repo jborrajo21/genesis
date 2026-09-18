@@ -20,6 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Code Generators",
+    "Typing :: Typed",
 ]
 dependencies = []
 
@@ -32,7 +33,7 @@ Issues = "https://github.com/jborrajo21/genesis/issues"
 genesis = "genesis.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff"]
+dev = ["pytest", "ruff", "mypy"]
 anthropic = ["anthropic"]
 
 [tool.ruff]
@@ -47,3 +48,11 @@ markers = ["slow: builds a generated repo in a real venv (needs network; ~7s)"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/genesis"]
+
+[tool.mypy]
+files = ["src/genesis"]
+python_version = "3.11"
+
+[[tool.mypy.overrides]]
+module = "anthropic.*"
+ignore_missing_imports = true

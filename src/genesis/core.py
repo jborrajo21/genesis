@@ -6,6 +6,7 @@ from pathlib import Path
 
 from genesis.adapter import ModelAdapter
 from genesis.anthropic_adapter import AnthropicAdapter
+from genesis.errors import GenesisError
 from genesis.interface import (
     _confirm_overwrite,
     _get_idea,
@@ -32,7 +33,7 @@ def _build_adapter(adapter_str: str, model: str, max_tokens: int) -> ModelAdapte
             return AnthropicAdapter(model=model, max_tokens=max_tokens)
         except ImportError:
             raise ValueError(
-                "Anthropic SDK not installed. Install with: pip install 'genesis[anthropic]'"
+                "Anthropic SDK not installed. Install with: pip install 'genesis-agent[anthropic]'"
             )
     if adapter_str == "ollama":
         return OllamaAdapter(model=model, max_tokens=max_tokens)
@@ -41,7 +42,7 @@ def _build_adapter(adapter_str: str, model: str, max_tokens: int) -> ModelAdapte
 
 
 def _create_plan(
-    idea: str | None,
+    idea: str,
     adapter_str: str,
     model: str,
     max_rounds: int = 6,
@@ -100,6 +101,9 @@ def cmd_plan(
         return 1
     except PlannerError as e:
         print_error(f"Planning failed: {e}")
+        return 1
+    except GenesisError as e:
+        print_error(str(e))
         return 1
     except ConnectionError as e:
         print_error(str(e))
@@ -161,6 +165,12 @@ def cmd_scaffold(plan_json: str, output_dir: str | None, force: bool) -> int:
     except TypeError:
         print_error("Plan JSON is not a plan object — expected an object with plan fields.")
         return 1
+    except OSError as e:
+        print_error(f"Could not write to {output_dir}: {e}")
+        return 1
+    except GenesisError as e:
+        print_error(str(e))
+        return 1
     except Exception as e:
         print_error(f"Unexpected error: {e}")
         return 1
@@ -174,6 +184,9 @@ def cmd_scaffold_file(plan_path: str | None, output_dir: str | None, force: bool
         plan_json = Path(plan_path).read_text()
     except OSError as e:
         print_error(f"Could not read plan file: {e}")
+        return 1
+    except GenesisError as e:
+        print_error(str(e))
         return 1
     return cmd_scaffold(plan_json, output_dir, force)
 
@@ -220,6 +233,9 @@ def cmd_create(
         return 1
     except PlannerError as e:
         print_error(f"Planning failed: {e}")
+        return 1
+    except GenesisError as e:
+        print_error(str(e))
         return 1
     except ConnectionError as e:
         print_error(str(e))

@@ -30,8 +30,12 @@ def _install_stub(monkeypatch, captured):
             stop_reason="end_turn",
         )
 
+    stub_omit = object()
     client = SimpleNamespace(messages=SimpleNamespace(create=create))
-    monkeypatch.setitem(sys.modules, "anthropic", SimpleNamespace(Anthropic=lambda: client))
+    monkeypatch.setitem(
+        sys.modules, "anthropic", SimpleNamespace(Anthropic=lambda: client, omit=stub_omit)
+    )
+    return stub_omit
 
 
 def test_response_schema_becomes_output_config(monkeypatch):
@@ -46,7 +50,7 @@ def test_response_schema_becomes_output_config(monkeypatch):
 
 def test_no_output_config_without_schema(monkeypatch):
     captured = {}
-    _install_stub(monkeypatch, captured)
+    stub_omit = _install_stub(monkeypatch, captured)
     adapter = AnthropicAdapter(model="m", max_tokens=100)
     adapter.complete([Message(role="user", content="hi")])
-    assert "output_config" not in captured
+    assert captured["output_config"] is stub_omit

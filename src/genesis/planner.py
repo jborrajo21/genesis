@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Literal
 
 from genesis.adapter import Message, ModelAdapter, StopReason
+from genesis.errors import GenesisError
 from genesis.template_registry import select_template
 
 _PLANNING_INSTRUCTION = """\
@@ -92,7 +93,7 @@ class Plan:
     manual_checklist: list[str] = field(default_factory=list)
 
 
-class PlannerError(Exception):
+class PlannerError(GenesisError):
     pass
 
 
@@ -165,6 +166,8 @@ class Planner:
         for _ in range(max_rounds):
             result = self._round(conversation)
             if result.status == "ready":
+                if result.plan is None:
+                    raise PlannerError("planner returned 'ready' without a plan")
                 return result.plan
             answers = answer_fn(result.questions)
             conversation.append(Message(role="user", content=_format_qa(result.questions, answers)))
@@ -180,6 +183,8 @@ class Planner:
         ]
         result = self._round(convo)
         if result.status == "ready":
+            if result.plan is None:
+                raise PlannerError("planner returned 'ready' without a plan")
             return result.plan
         raise PlannerError("planner could not produce a plan within max_rounds")
 

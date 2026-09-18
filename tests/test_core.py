@@ -6,9 +6,11 @@ import pytest
 from genesis.adapter import Completion
 from genesis.anthropic_adapter import SUPPORTED_MODELS
 from genesis.core import _create_plan, cmd_create, cmd_plan, cmd_scaffold, cmd_scaffold_file
+from genesis.errors import GenesisError, InputUnavailableError
 from genesis.fakes import FakeAdapter
-from genesis.interface import _select_adapter, _select_model
+from genesis.interface import _prompt, _select_adapter, _select_model
 from genesis.ollama_adapter import SUPPORTED_MODELS as OLLAMA_MODELS
+from genesis.planner import PlannerError
 
 PY = ["Python 3.11"]
 RUST = ["Rust", "clap"]
@@ -246,3 +248,23 @@ def test_cmd_create_without_force_refuses_when_not_a_tty(
 def test_cmd_scaffold_unsupported_prints_no_setup_steps(tmp_path, capsys):
     assert cmd_scaffold(json.dumps(_plan(RUST)), str(tmp_path / "gen"), False) == 0
     assert "Run:" not in capsys.readouterr().out
+
+
+def _eof(*args, **kwargs):
+    raise EOFError("EOF when reading a line")
+
+
+def test_prompt_raises_input_unavailable_at_eof(monkeypatch):
+    monkeypatch.setattr("builtins.input", _eof)
+    with pytest.raises(InputUnavailableError):
+        _prompt("→ ")
+
+
+def test_cmd_scaffold_file_reports_exhausted_stdin(monkeypatch, capsys):
+    monkeypatch.setattr("builtins.input", _eof)
+    assert cmd_scaffold_file(None, "out", False) == 1
+    assert "stdin is empty" in capsys.readouterr().err
+
+
+def test_planner_error_is_a_genesis_error():
+    assert issubclass(PlannerError, GenesisError)

@@ -2,6 +2,7 @@ import argparse
 from importlib.metadata import version
 
 from genesis.core import cmd_create, cmd_plan, cmd_scaffold_file
+from genesis.interface import print_error
 
 
 def main(argv=None):
@@ -48,29 +49,33 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
 
-    if args.command == "plan":
-        return cmd_plan(
-            args.idea,
-            args.adapter,
-            args.model,
-            args.output,
-            args.max_rounds,
-            args.max_tokens,
-        )
+    try:
+        if args.command == "plan":
+            return cmd_plan(
+                args.idea,
+                args.adapter,
+                args.model,
+                args.output,
+                args.max_rounds,
+                args.max_tokens,
+            )
 
-    if args.command == "scaffold":
-        return cmd_scaffold_file(args.plan_json, args.output_dir, args.force)
+        if args.command == "scaffold":
+            return cmd_scaffold_file(args.plan_json, args.output_dir, args.force)
 
-    if args.command == "create":
-        return cmd_create(
-            args.idea,
-            args.output_dir,
-            args.adapter,
-            args.model,
-            args.output,
-            args.force,
-            args.max_rounds,
-            args.max_tokens,
-        )
+        if args.command == "create":
+            return cmd_create(
+                args.idea,
+                args.output_dir,
+                args.adapter,
+                args.model,
+                args.output,
+                args.force,
+                args.max_rounds,
+                args.max_tokens,
+            )
 
-    return 0
+        return 0
+    except KeyboardInterrupt:
+        print_error("Cancelled.")
+        return 130

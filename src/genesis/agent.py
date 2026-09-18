@@ -30,7 +30,7 @@ class Agent:
     def run(self, prompt: str) -> AgentResult:
         messages = [Message(role="user", content=prompt)]
         total_usage = 0
-        tool_calls = []
+        tool_calls: list[ToolCall] = []
         last_text = ""
         for turn in range(self._max_turns):
             completion = self._adapter.complete(messages, tools=self._registry.definitions())

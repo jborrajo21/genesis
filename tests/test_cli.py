@@ -117,3 +117,11 @@ def test_parse_errors_exit_two(argv):
     with pytest.raises(SystemExit) as exc:
         main(argv)
     assert exc.value.code == 2
+
+
+def test_keyboard_interrupt_returns_130(monkeypatch):
+    def interrupt(*args):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("genesis.cli.cmd_plan", interrupt)
+    assert main(["plan", "an idea"]) == 130

@@ -2,6 +2,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from genesis.errors import GenesisError
+
 
 @dataclass(frozen=True)
 class Template:
@@ -43,7 +45,13 @@ _TEMPLATES_ROOT = Path(__file__).resolve().parent / "templates"
 
 def template_dir(template: Template) -> Path:
     """Filesystem location of a template's files inside the installed package."""
-    return _TEMPLATES_ROOT / template.path
+    path = _TEMPLATES_ROOT / template.path
+    if not path.is_dir():
+        raise GenesisError(
+            f"Template '{template.name}' is missing from the installed package. "
+            "Reinstall with: pip install --force-reinstall genesis-agent"
+        )
+    return path
 
 
 def _mentions(text: str, marker: str) -> bool:

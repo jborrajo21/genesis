@@ -1,6 +1,11 @@
+from typing import TYPE_CHECKING
+
 from genesis.adapter import Completion, Message, StopReason, ToolCall, ToolDef
 
-_STOP_REASON_MAP = {
+if TYPE_CHECKING:
+    from anthropic.types import MessageParam
+
+_STOP_REASON_MAP: dict[str | None, StopReason] = {
     "end_turn": StopReason.DONE,
     "stop_sequence": StopReason.DONE,
     "max_tokens": StopReason.TRUNCATED,
@@ -25,26 +30,27 @@ class AnthropicAdapter:
         tools: list[ToolDef] | None = None,
         response_schema: dict | None = None,
     ) -> Completion:
+        import anthropic
+
         has_system = messages[0].role == "system"
         system = messages[0].content if has_system else None
         convo = messages[1:] if has_system else messages
 
-        kwargs = {
-            "model": self._model,
-            "max_tokens": self._max_tokens,
-            "messages": [self._to_anthropic(m) for m in convo],
-        }
-        if system:
-            kwargs["system"] = system
-        if tools:
-            kwargs["tools"] = [
+        response = self._client.messages.create(
+            model=self._model,
+            max_tokens=self._max_tokens,
+            messages=[self._to_anthropic(m) for m in convo],
+            system=system if system else anthropic.omit,
+            tools=[
                 {"name": t.name, "description": t.description, "input_schema": t.input_schema}
                 for t in tools
             ]
-        if response_schema:
-            kwargs["output_config"] = {"format": {"type": "json_schema", "schema": response_schema}}
-
-        response = self._client.messages.create(**kwargs)
+            if tools
+            else anthropic.omit,
+            output_config={"format": {"type": "json_schema", "schema": response_schema}}
+            if response_schema
+            else anthropic.omit,
+        )
 
         text = next((b.text for b in response.content if b.type == "text"), "")
         tool_calls = [
@@ -60,8 +66,10 @@ class AnthropicAdapter:
             stop_reason=_STOP_REASON_MAP.get(response.stop_reason, StopReason.OTHER),
         )
 
-    def _to_anthropic(self, m: Message) -> dict:
+    def _to_anthropic(self, m: Message) -> "MessageParam":
         if m.role == "tool":
+            if m.tool_call_id is None:
+                raise ValueError("tool message has no tool_call_id")
             return {
                 "role": "user",
                 "content": [

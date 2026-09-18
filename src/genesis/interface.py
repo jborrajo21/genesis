@@ -2,7 +2,19 @@ import sys
 from pathlib import Path
 
 from genesis.anthropic_adapter import SUPPORTED_MODELS as ANTHROPIC_MODELS
+from genesis.errors import InputUnavailableError
 from genesis.ollama_adapter import SUPPORTED_MODELS as OLLAMA_MODELS
+
+
+def _prompt(message: str) -> str:
+    """Read one line of interactive input. Raises InputUnavailableError at EOF."""
+    try:
+        return input(message).strip()
+    except EOFError:
+        raise InputUnavailableError(
+            "Genesis needs interactive input here, but stdin is empty. "
+            "Pass the values as arguments instead — see `genesis <command> --help`."
+        ) from None
 
 
 def answer_fn(questions: list[str]) -> list[str]:
@@ -10,7 +22,7 @@ def answer_fn(questions: list[str]) -> list[str]:
     answers = []
     for i, q in enumerate(questions, 1):
         print(f"\n[Q{i}/{len(questions)}] {q}")
-        answer = input("→ ").strip()
+        answer = _prompt("→ ")
         answers.append(answer)
     return answers
 
@@ -33,31 +45,31 @@ def print_error(msg: str) -> None:
 def _confirm_overwrite(path: str) -> bool:
     """Prompt user for overwrite confirmation."""
     print(f"\n{path} already exists.")
-    return input("Overwrite? (y/n) → ").strip().lower() == "y"
+    return _prompt("Overwrite? (y/n) → ").lower() == "y"
 
 
 def _get_idea() -> str:
     """Prompt for idea if not provided."""
     print("\nWhat's your project idea?")
-    return input("→ ").strip()
+    return _prompt("→ ")
 
 
 def _get_output_dir() -> str:
     """Prompt for output directory if not provided."""
     print("\nWhere should we scaffold it?")
-    return input("→ ").strip()
+    return _prompt("→ ")
 
 
 def _get_json_path() -> str:
     """Prompt for plan json file path if not provided."""
     print("\nEnter your json plan's path?")
-    return input("→ ").strip()
+    return _prompt("→ ")
 
 
 def _get_save_path() -> str:
     """Prompt for save path."""
     print("\nSave this plan to a file?")
-    return input("Path (leave blank to print instead) → ").strip()
+    return _prompt("Path (leave blank to print instead) → ")
 
 
 def _select_adapter() -> str:
@@ -65,7 +77,7 @@ def _select_adapter() -> str:
     print("\nChoose adapter:")
     print("1) Anthropic")
     print("2) Ollama")
-    choice = input("→ ").strip()
+    choice = _prompt("→ ")
     if choice == "1":
         return "anthropic"
     elif choice == "2":
@@ -88,11 +100,11 @@ def _select_model(adapter: str) -> str:
         print(f"{i}) {model}")
     print(f"{len(models) + 1}) Enter custom model name")
 
-    choice = input("→ ").strip()
+    choice = _prompt("→ ")
     try:
         idx = int(choice) - 1
         if idx == len(models):
-            return input("Model name: ").strip()
+            return _prompt("Model name: ")
         return models[idx]
     except (ValueError, IndexError):
         raise ValueError("Invalid choice")
