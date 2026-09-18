@@ -34,7 +34,7 @@ genesis = "genesis.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "mypy"]
-anthropic = ["anthropic"]
+anthropic = ["anthropic>=0.119"]
 
 [tool.ruff]
 line-length = 100

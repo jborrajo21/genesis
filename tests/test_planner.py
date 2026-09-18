@@ -121,3 +121,24 @@ def test_revise_returns_updated_plan():
     result = Planner(fake).revise(original, "add a config step")
     assert result.summary == "s2"
     assert any("add a config step" in m.content for m in fake.calls[0])
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '{"status": "ready", "plan": null}',
+        '{"status": "ready", "plan": "a string"}',
+        '{"status": "ready", "plan": []}',
+        '{"status": "need_info", "questions": null}',
+        '{"status": "need_info", "questions": "one question"}',
+        '{"status": "ready", '
+        '"plan": {"project_name": "x", "summary": "s", "stack": '
+        '["python"], "phases": ["juststring"]}}',
+        '{"status": "ready", '
+        '"plan": {"project_name": "x", "summary": "s", "stack": '
+        '["python"], "phases": [null]}}',
+    ],
+)
+def test_round_rejects_wrong_typed_payloads(payload):
+    with pytest.raises(PlannerError):
+        Planner(FakeAdapter([Completion(text=payload)])).plan(idea="x", answer_fn=lambda q: [])

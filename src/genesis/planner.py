@@ -149,11 +149,23 @@ class Planner:
         status = data.get("status")
         try:
             if status == "need_info":
-                return RoundResult(status="need_info", questions=data["questions"])
+                questions = data["questions"]
+                if not isinstance(questions, list) or not all(
+                    isinstance(q, str) for q in questions
+                ):
+                    raise PlannerError(
+                        "'need_info' response has questions that are not a list of strings"
+                    )
+                return RoundResult(status="need_info", questions=questions)
             if status == "ready":
-                return RoundResult(status="ready", plan=_parse_plan(data["plan"]))
+                plan_data = data["plan"]
+                if not isinstance(plan_data, dict):
+                    raise PlannerError("'ready' response has a plan that is not an object")
+                return RoundResult(status="ready", plan=_parse_plan(plan_data))
         except KeyError as e:
             raise PlannerError(f"malformed {status!r} response, missing key: {e}") from e
+        except TypeError as e:
+            raise PlannerError(f"malformed {status!r} response: {e}") from e
         raise PlannerError(f"unexpected status: {status!r}")
 
     def plan(

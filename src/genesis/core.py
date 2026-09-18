@@ -121,6 +121,9 @@ def cmd_scaffold(plan_json: str, output_dir: str | None, force: bool) -> int:
     try:
         if output_dir is None:
             output_dir = _get_output_dir()
+        if not output_dir:
+            print_error("No output directory given.")
+            return 1
         print_progress("Scaffolding")
         plan_data = json.loads(plan_json)
         plan = _parse_plan(plan_data)
@@ -207,6 +210,9 @@ def cmd_create(
             idea = _get_idea()
         if output_dir is None:
             output_dir = _get_output_dir()
+        if not output_dir:
+            print_error("No output directory given.")
+            return 1
         print_progress("Planning")
         plan = _create_plan(idea, adapter_str, model, max_rounds, max_tokens)
         print_success("Plan created")

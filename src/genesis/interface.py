@@ -103,6 +103,8 @@ def _select_model(adapter: str) -> str:
     choice = _prompt("→ ")
     try:
         idx = int(choice) - 1
+        if idx < 0:
+            raise ValueError("Invalid choice")
         if idx == len(models):
             return _prompt("Model name: ")
         return models[idx]

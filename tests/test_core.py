@@ -268,3 +268,13 @@ def test_cmd_scaffold_file_reports_exhausted_stdin(monkeypatch, capsys):
 
 def test_planner_error_is_a_genesis_error():
     assert issubclass(PlannerError, GenesisError)
+
+
+def test_cmd_scaffold_rejects_an_empty_output_dir(capsys):
+    assert cmd_scaffold(json.dumps(_plan(PY)), "", False) == 1
+    assert "No output directory" in capsys.readouterr().err
+
+
+def test_cmd_create_rejects_an_empty_output_dir(capsys):
+    assert cmd_create("an idea", "", None, None, None, False) == 1
+    assert "No output directory" in capsys.readouterr().err
