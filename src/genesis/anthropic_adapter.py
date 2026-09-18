@@ -9,6 +9,7 @@ _STOP_REASON_MAP: dict[str | None, StopReason] = {
     "end_turn": StopReason.DONE,
     "stop_sequence": StopReason.DONE,
     "max_tokens": StopReason.TRUNCATED,
+    "model_context_window_exceeded": StopReason.TRUNCATED,
     "tool_use": StopReason.TOOL_USE,
     "refusal": StopReason.OTHER,
 }
