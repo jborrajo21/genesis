@@ -6,15 +6,20 @@ import logging
 import shutil
 import tempfile
 import zipfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from genesis.errors import GenesisError
-from genesis.planner import _parse_plan
+from genesis.anthropic_adapter import SUPPORTED_MODELS, AnthropicAdapter
+from genesis.errors import AdapterAuthError, AdapterError, GenesisError
+from genesis.planner import Planner, QARound, _parse_plan
 from genesis.scaffolder import normalize, scaffold
 
 Response = dict[str, Any]
+
+_API_KEY_HEADER = "anthropic-api-key"
+_DEFAULT_MODEL = "claude-haiku-4-5"
+_MAX_TOKENS = 10_000
 
 _log = logging.getLogger(__name__)
 
@@ -99,8 +104,27 @@ def _zip_dir(root: Path) -> bytes:
 
 
 def _plan(req: Request) -> Response:
-    """POST /plan — BYOK. Task 3. Key from a header, never logged, never persisted."""
-    return _error(501, "Planning is not available yet. Use POST /scaffold with a plan JSON.")
+    """POST /plan — run one planning round against the caller's own API key."""
+    key = req.headers.get(_API_KEY_HEADER)
+    if not key:
+        return _error(401, f"Send your Anthropic API key in the {_API_KEY_HEADER} header.")
+
+    data = json.loads(req.body)
+    idea = data["idea"]
+    model = data.get("model", _DEFAULT_MODEL)
+    if model not in SUPPORTED_MODELS:
+        allowed = ", ".join(SUPPORTED_MODELS)
+        return _error(400, f"Unknown model {model!r}. Choose one of: {allowed}.")
+
+    rounds = [QARound(**r) for r in data.get("rounds", [])]
+    adapter = AnthropicAdapter(api_key=key, model=model, max_tokens=_MAX_TOKENS)
+    result = Planner(adapter).step(idea, rounds)
+
+    if result.status == "ready":
+        if result.plan is None:
+            raise RuntimeError("planner returned 'ready' without a plan")
+        return _json(200, {"status": "ready", "plan": asdict(result.plan)})
+    return _json(200, {"status": "need_info", "questions": result.questions})
 
 
 def _index(req: Request) -> Response:
@@ -142,6 +166,10 @@ def handler(event: dict[str, Any], context: Any) -> Response:
     except TypeError:
         _log.exception("TypeError while handling request")
         return _error(400, "Malformed request: expected a plan object.")
+    except AdapterAuthError as e:
+        return _error(401, str(e))
+    except AdapterError as e:
+        return _error(502, str(e))
     except GenesisError as e:
         return _error(400, str(e))
     except OSError:

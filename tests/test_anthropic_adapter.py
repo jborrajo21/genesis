@@ -6,6 +6,7 @@ import pytest
 
 from genesis.adapter import Message
 from genesis.anthropic_adapter import AnthropicAdapter
+from genesis.errors import AdapterAuthError, AdapterError
 
 
 @pytest.mark.skipif(
@@ -32,8 +33,29 @@ def _install_stub(monkeypatch, captured):
 
     stub_omit = object()
     client = SimpleNamespace(messages=SimpleNamespace(create=create))
+
+    def Anthropic(api_key=None, **kwargs):
+        # Mirrors the real client, which exposes the resolved key as .api_key.
+        client.api_key = api_key
+        return client
+
+    # The error classes are part of the contract the adapter catches on, so the
+    # stub must carry them or the except clauses are unreachable in these tests.
+    class APIError(Exception):
+        pass
+
+    class AuthenticationError(APIError):
+        pass
+
     monkeypatch.setitem(
-        sys.modules, "anthropic", SimpleNamespace(Anthropic=lambda: client, omit=stub_omit)
+        sys.modules,
+        "anthropic",
+        SimpleNamespace(
+            Anthropic=Anthropic,
+            omit=stub_omit,
+            APIError=APIError,
+            AuthenticationError=AuthenticationError,
+        ),
     )
     return stub_omit
 
@@ -54,3 +76,45 @@ def test_no_output_config_without_schema(monkeypatch):
     adapter = AnthropicAdapter(model="m", max_tokens=100)
     adapter.complete([Message(role="user", content="hi")])
     assert captured["output_config"] is stub_omit
+
+
+def test_byok_key_reaches_the_client(monkeypatch):
+    """The BYOK parameter must reach the SDK; storing it without using it would
+    silently bill the server's own credential instead of the caller's."""
+    _install_stub(monkeypatch, {})
+    adapter = AnthropicAdapter(model="m", max_tokens=100, api_key="sk-caller")
+    assert adapter._client.api_key == "sk-caller"
+
+
+def test_no_key_falls_through_to_the_sdk_default(monkeypatch):
+    _install_stub(monkeypatch, {})
+    assert AnthropicAdapter(model="m", max_tokens=100)._client.api_key is None
+
+
+def test_the_adapter_keeps_no_copy_of_the_key(monkeypatch):
+    """The key necessarily lives inside the SDK client, which needs it to sign
+    requests. What BYOK promises is that Genesis keeps no second copy of its
+    own — the one thing that would outlive the client and reach a log line."""
+    _install_stub(monkeypatch, {})
+    adapter = AnthropicAdapter(model="m", max_tokens=100, api_key="sk-secret")
+    own_attributes = {k: v for k, v in vars(adapter).items() if k != "_client"}
+    assert "sk-secret" not in repr(own_attributes)
+
+
+@pytest.mark.parametrize(
+    "stub_error,expected",
+    [("AuthenticationError", AdapterAuthError), ("APIError", AdapterError)],
+)
+def test_sdk_errors_become_typed_genesis_errors(monkeypatch, stub_error, expected):
+    _install_stub(monkeypatch, {})
+    import anthropic
+
+    def boom(**kwargs):
+        raise getattr(anthropic, stub_error)("upstream detail")
+
+    monkeypatch.setattr(anthropic.Anthropic().messages, "create", boom)
+    adapter = AnthropicAdapter(model="m", max_tokens=100, api_key="k")
+
+    with pytest.raises(expected) as exc:
+        adapter.complete([Message(role="user", content="hi")])
+    assert exc.value.__cause__ is not None

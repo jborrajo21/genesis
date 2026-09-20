@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Genesis — scaffold a starter repo from a plan (Phase 10)
+
+Resources:
+  GenesisFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      Architectures: [arm64]
+      MemorySize: 1024
+      Timeout: 60
+    Metadata:
+      DockerContext: .
+      Dockerfile: Dockerfile
+      DockerTag: genesis-lambda
+      DockerBuildTarget: lambda

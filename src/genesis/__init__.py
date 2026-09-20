@@ -1,6 +1,6 @@
 from genesis.adapter import Completion, Message, ModelAdapter, ToolDef
-from genesis.errors import GenesisError
-from genesis.planner import Phase, Plan, Planner
+from genesis.errors import AdapterAuthError, AdapterError, GenesisError
+from genesis.planner import Phase, Plan, Planner, QARound, RoundResult
 from genesis.scaffolder import BuildResult, build_and_test, scaffold
 
 __all__ = [
@@ -15,4 +15,8 @@ __all__ = [
     "build_and_test",
     "scaffold",
     "GenesisError",
+    "QARound",
+    "RoundResult",
+    "AdapterError",
+    "AdapterAuthError",
 ]

@@ -93,6 +93,12 @@ class Plan:
     manual_checklist: list[str] = field(default_factory=list)
 
 
+@dataclass
+class QARound:
+    questions: list[str]
+    answers: list[str]
+
+
 class PlannerError(GenesisError):
     pass
 
@@ -208,3 +214,21 @@ class Planner:
             Message(role="user", content=f"Revise the plan based on this feedback: {feedback}"),
         ]
         return self._force_plan(conversation)
+
+    def step(self, idea: str, rounds: list[QARound], max_rounds: int = 4) -> RoundResult:
+        """Run one planning round from a conversation the caller carries."""
+
+        for r in rounds:
+            if len(r.questions) != len(r.answers):
+                raise PlannerError(
+                    f"round has {len(r.questions)} questions but {len(r.answers)} answers"
+                )
+
+        conversation = [Message(role="user", content=idea)]
+        conversation += [
+            Message(role="user", content=_format_qa(r.questions, r.answers)) for r in rounds
+        ]
+
+        if len(rounds) >= max_rounds:
+            return RoundResult(status="ready", plan=self._force_plan(conversation))
+        return self._round(conversation)

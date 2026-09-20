@@ -13,6 +13,8 @@ venv/
 # Tooling caches
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.aws-sam/
 
 # Claude Code local state
 .claude/

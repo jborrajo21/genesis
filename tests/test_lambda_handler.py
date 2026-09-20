@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import logging
 import tempfile
 import zipfile
 from pathlib import Path
@@ -8,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from genesis import lambda_handler as lh
+from genesis.adapter import Completion, StopReason
+from genesis.errors import AdapterAuthError, AdapterError
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -180,3 +183,103 @@ def test_nothing_escapes_as_an_unhandled_exception(monkeypatch):
     res = lh.handler(make_event(body=plan_body()), None)
     assert res["statusCode"] == 500
     assert "internal detail" not in res["body"]
+
+
+# --- /plan -----------------------------------------------------------------
+
+KEY = "sk-ant-secret"
+
+
+def plan_event(body, key=KEY):
+    headers = {"Anthropic-Api-Key": key} if key else {}
+    return make_event(path="/plan", body=json.dumps(body), headers=headers)
+
+
+def fake_adapter(monkeypatch, payload=None, error=None, captured=None):
+    """Replace AnthropicAdapter so /plan runs with no key, no network, no SDK."""
+
+    class Fake:
+        def __init__(self, **kwargs):
+            if captured is not None:
+                captured.update(kwargs)
+
+        def complete(self, messages, tools=None, response_schema=None):
+            if error is not None:
+                raise error
+            return Completion(
+                text=json.dumps(payload), tool_calls=[], usage=1, stop_reason=StopReason.DONE
+            )
+
+    monkeypatch.setattr(lh, "AnthropicAdapter", Fake)
+
+
+def test_plan_without_a_key_is_401_naming_the_header():
+    res = lh.handler(plan_event({"idea": "a todo cli"}, key=None), None)
+    assert res["statusCode"] == 401
+    assert "anthropic-api-key" in json.loads(res["body"])["message"]
+
+
+def test_plan_returns_questions_and_passes_the_key_and_model(monkeypatch):
+    captured = {}
+    questions = {"status": "need_info", "questions": ["Which storage?"]}
+    fake_adapter(monkeypatch, questions, captured=captured)
+    res = lh.handler(plan_event({"idea": "a todo cli", "model": "claude-sonnet-5"}), None)
+
+    assert json.loads(res["body"]) == {"status": "need_info", "questions": ["Which storage?"]}
+    assert captured["api_key"] == KEY
+    assert captured["model"] == "claude-sonnet-5"
+    assert captured["max_tokens"] > 20  # the adapter default truncates every plan
+
+
+def test_plan_ready_output_posts_straight_into_scaffold(monkeypatch):
+    """The two endpoints compose: no server state reconstructs the pipeline."""
+    fake_adapter(
+        monkeypatch,
+        {
+            "status": "ready",
+            "plan": {
+                "project_name": "Todo CLI",
+                "summary": "s",
+                "stack": ["Python 3.11"],
+                "phases": [{"name": "Core", "steps": ["add a task"]}],
+            },
+        },
+    )
+    planned = json.loads(
+        lh.handler(
+            plan_event({"idea": "a todo cli", "rounds": [{"questions": ["q"], "answers": ["a"]}]}),
+            None,
+        )["body"]
+    )
+    assert planned["status"] == "ready"
+
+    scaffolded = lh.handler(make_event(body=json.dumps(planned["plan"])), None)
+    assert scaffolded["statusCode"] == 200
+    assert "todo_cli/pyproject.toml" in unzip(scaffolded).namelist()
+
+
+def test_unknown_model_is_400_listing_the_allowed_ones(monkeypatch):
+    fake_adapter(monkeypatch, {"status": "need_info", "questions": []})
+    res = lh.handler(plan_event({"idea": "x", "model": "gpt-4"}), None)
+    assert res["statusCode"] == 400
+    assert "claude-haiku-4-5" in json.loads(res["body"])["message"]
+
+
+def test_a_rejected_key_is_401_not_400(monkeypatch):
+    """AdapterAuthError subclasses GenesisError, so a clause placed one line too
+    low would return a plausible-looking 400 instead."""
+    fake_adapter(monkeypatch, error=AdapterAuthError("the API key was rejected by Anthropic"))
+    res = lh.handler(plan_event({"idea": "x"}), None)
+    assert res["statusCode"] == 401
+
+    fake_adapter(monkeypatch, error=AdapterError("upstream 529"))
+    assert lh.handler(plan_event({"idea": "x"}), None)["statusCode"] == 502
+
+
+def test_the_key_never_reaches_a_log_line_or_a_response(monkeypatch, caplog):
+    fake_adapter(monkeypatch, error=RuntimeError("boom"))
+    with caplog.at_level(logging.DEBUG):
+        res = lh.handler(plan_event({"idea": "x"}), None)
+    assert res["statusCode"] == 500
+    assert KEY not in caplog.text
+    assert KEY not in json.dumps(res)
