@@ -180,16 +180,14 @@ class Planner:
         answer_fn: Callable[[list[str]], list[str]],
         max_rounds: int = 4,
     ) -> Plan:
-        conversation = [Message(role="user", content=idea)]
-        for _ in range(max_rounds):
-            result = self._round(conversation)
+        rounds: list[QARound] = []
+        while True:
+            result = self.step(idea, rounds, max_rounds)
             if result.status == "ready":
                 if result.plan is None:
                     raise PlannerError("planner returned 'ready' without a plan")
                 return result.plan
-            answers = answer_fn(result.questions)
-            conversation.append(Message(role="user", content=_format_qa(result.questions, answers)))
-        return self._force_plan(conversation)
+            rounds.append(QARound(result.questions, answer_fn(result.questions)))
 
     def _force_plan(self, conversation: list[Message]) -> Plan:
         convo = conversation + [
