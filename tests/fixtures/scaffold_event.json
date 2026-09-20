@@ -1,0 +1,17 @@
+{
+  "version": "2.0",
+  "rawPath": "/scaffold",
+  "rawQueryString": "",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/scaffold",
+      "protocol": "HTTP/1.1"
+    }
+  },
+  "body": "{\"project_name\": \"Todo CLI\", \"summary\": \"A command-line todo list manager.\", \"stack\": [\"Python 3.11\", \"argparse\"], \"phases\": [{\"name\": \"Core\", \"steps\": [\"add a task\", \"list tasks\", \"complete a task\"]}, {\"name\": \"Storage\", \"steps\": [\"persist tasks to JSON\"]}], \"manual_checklist\": [\"choose where the data file lives\"]}",
+  "isBase64Encoded": false
+}
