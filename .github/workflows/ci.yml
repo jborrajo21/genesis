@@ -50,4 +50,19 @@ jobs:
               run: >
                 docker run --rm -v "$PWD/ci:/plan:ro" genesis:ci
                 scaffold /plan/plan.json out
+            - run: docker build --target lambda -t genesis:lambda-ci .
+            - name: the lambda image carries the runtime client and the handler
+              run: >
+                docker run --rm --entrypoint python genesis:lambda-ci -c
+                "import awslambdaric, genesis.lambda_handler"
+            - name: the handler scaffolds a repo inside the lambda image
+              run: >
+                docker run --rm -v "$PWD/tests/fixtures:/f:ro"
+                --entrypoint python genesis:lambda-ci -c
+                "import base64, io, json, zipfile;
+                from genesis.lambda_handler import handler;
+                r = handler(json.load(open('/f/scaffold_event.json')), None);
+                assert r['statusCode'] == 200, r;
+                z = zipfile.ZipFile(io.BytesIO(base64.b64decode(r['body'])));
+                assert any(n.endswith('pyproject.toml') for n in z.namelist()), z.namelist()"
                 

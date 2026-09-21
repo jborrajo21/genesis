@@ -75,6 +75,47 @@ makes it scriptable.
 | `--max-rounds` | `plan`, `create` | 6 | Cap on clarifying rounds — a ceiling, not a target |
 | `--max-tokens` | `plan`, `create` | 10000 | Per model call. Raise it if a plan is truncated |
 
+### Interactive — no arguments at all
+
+The friendliest way in. Every prompt corresponds to an argument you could have passed.
+
+```
+$ genesis create
+
+What's your project idea?
+→ a cli that tracks time spent per project
+
+Where should we scaffold it?
+→ ~/timetrack
+
+Choose adapter:
+1) Anthropic
+2) Ollama
+→ 1
+
+Choose anthropic model:
+1) claude-opus-5
+2) claude-sonnet-5
+3) claude-haiku-4-5
+4) Enter custom model name
+→ 3
+
+→ Planning...
+[Q1/2] Where should the time entries be stored?
+→ a json file in the project directory
+
+[Q2/2] Should it track a single active timer, or allow several at once?
+→ one at a time
+
+✓ Plan created
+→ Scaffolding... ✓ Scaffolded to ~/timetrack
+✓ Build and tests passed
+```
+
+`genesis plan` and `genesis scaffold` behave the same way: omit any positional argument and you are
+asked for it. `genesis scaffold` on its own asks for a plan file and an output directory, and needs
+no model or key at all.
+
 ### End to end
 
 ```

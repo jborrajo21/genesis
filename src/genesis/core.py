@@ -54,6 +54,9 @@ def _create_plan(
     if model is None:
         model = _select_model(adapter_str)
 
+    # Announced here, not by the callers: both used to print this before the
+    # adapter and model prompts, so the terminal read as if it had stalled.
+    print_progress("Planning")
     adapter = _build_adapter(adapter_str, model, max_tokens)
 
     planner = Planner(adapter)
@@ -72,7 +75,6 @@ def cmd_plan(
     try:
         if idea is None:
             idea = _get_idea()
-        print_progress("Planning")
         plan = _create_plan(idea, adapter_str, model, max_rounds, max_tokens)
         print_success("Plan created")
 
@@ -213,7 +215,6 @@ def cmd_create(
         if not output_dir:
             print_error("No output directory given.")
             return 1
-        print_progress("Planning")
         plan = _create_plan(idea, adapter_str, model, max_rounds, max_tokens)
         print_success("Plan created")
         plan_json = json.dumps(asdict(plan), indent=2)
