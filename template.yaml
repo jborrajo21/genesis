@@ -8,10 +8,18 @@ Resources:
     Properties:
       PackageType: Image
       Architectures: [arm64]
-      MemorySize: 1024
+      MemorySize: 128
       Timeout: 60
+      FunctionUrlConfig:
+        AuthType: NONE
+
     Metadata:
       DockerContext: .
       Dockerfile: Dockerfile
       DockerTag: genesis-lambda
       DockerBuildTarget: lambda
+
+Outputs:
+  FunctionUrl:
+    Description: Public HTTPS endpoint
+    Value: !GetAtt GenesisFunctionUrl.FunctionUrl
