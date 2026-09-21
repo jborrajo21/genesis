@@ -16,11 +16,12 @@ _STOP_REASON_MAP: dict[str | None, StopReason] = {
 }
 
 SUPPORTED_MODELS = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]
+DEFAULT_MODEL = "claude-haiku-4-5"
 
 
 class AnthropicAdapter:
     def __init__(
-        self, model: str = "claude-haiku-4-5", max_tokens: int = 20, api_key: str | None = None
+        self, model: str = DEFAULT_MODEL, max_tokens: int = 20, api_key: str | None = None
     ):
         import anthropic
 

@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from genesis.anthropic_adapter import SUPPORTED_MODELS, AnthropicAdapter
+from genesis.anthropic_adapter import DEFAULT_MODEL, SUPPORTED_MODELS, AnthropicAdapter
 from genesis.errors import AdapterAuthError, AdapterError, GenesisError
 from genesis.planner import Plan, Planner, QARound, RoundResult, _parse_plan
 from genesis.scaffolder import normalize, scaffold
@@ -18,7 +18,6 @@ from genesis.scaffolder import normalize, scaffold
 Response = dict[str, Any]
 
 _API_KEY_HEADER = "anthropic-api-key"
-_DEFAULT_MODEL = "claude-haiku-4-5"
 _MAX_TOKENS = 10_000
 
 _log = logging.getLogger(__name__)
@@ -114,7 +113,7 @@ def _planning_round(req: Request) -> RoundResult | Response:
         return _error(401, f"Send your Anthropic API key in the {_API_KEY_HEADER} header.")
 
     data = json.loads(req.body)
-    model = data.get("model", _DEFAULT_MODEL)
+    model = data.get("model", DEFAULT_MODEL)
     if model not in SUPPORTED_MODELS:
         allowed = ", ".join(SUPPORTED_MODELS)
         return _error(400, f"Unknown model {model!r}. Choose one of: {allowed}.")

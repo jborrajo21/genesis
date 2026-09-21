@@ -107,9 +107,6 @@ def cmd_plan(
     except GenesisError as e:
         print_error(str(e))
         return 1
-    except ConnectionError as e:
-        print_error(str(e))
-        return 1
     except OSError as e:
         print_error(f"Could not write output: {e}")
         return 1
@@ -242,9 +239,6 @@ def cmd_create(
         print_error(f"Planning failed: {e}")
         return 1
     except GenesisError as e:
-        print_error(str(e))
-        return 1
-    except ConnectionError as e:
         print_error(str(e))
         return 1
     except OSError as e:

@@ -142,7 +142,8 @@ class Planner:
         completion = self._adapter.complete(messages, response_schema=_PLAN_SCHEMA)
         if completion.stop_reason is StopReason.TRUNCATED:
             raise PlannerError(
-                "response was truncated by max_tokens — increase --max-tokens and try again"
+                "the model's response was cut off by the token limit — the idea may be too "
+                "broad to plan in one pass, or the token budget too low"
             )
         try:
             data = _extract_json(completion.text)

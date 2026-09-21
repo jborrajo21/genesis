@@ -4,6 +4,7 @@ import urllib.error
 import urllib.request
 
 from genesis.adapter import Completion, Message, StopReason, ToolDef
+from genesis.errors import AdapterError
 
 DEFAULT_BASE_URL = "http://localhost:11434/v1"
 SUPPORTED_MODELS = [
@@ -11,6 +12,7 @@ SUPPORTED_MODELS = [
     "mistral",
     "qwen2.5-coder",
 ]
+DEFAULT_MODEL = "gemma4:latest"
 
 _FINISH_REASON_MAP = {
     "stop": StopReason.DONE,
@@ -22,7 +24,7 @@ _FINISH_REASON_MAP = {
 class OllamaAdapter:
     def __init__(
         self,
-        model: str = "gemma4:latest",
+        model: str = DEFAULT_MODEL,
         max_tokens: int = 10000,
         base_url: str | None = None,
         timeout: int = 120,
@@ -60,11 +62,13 @@ class OllamaAdapter:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 body = json.load(response)
         except urllib.error.HTTPError as e:
-            raise ValueError(f"Ollama rejected the request ({e.code}): {e.read().decode()[:200]}")
+            raise AdapterError(
+                f"Ollama rejected the request ({e.code}): {e.read().decode()[:200]}"
+            ) from e
         except urllib.error.URLError as e:
-            raise ConnectionError(
+            raise AdapterError(
                 f"Could not reach Ollama at {self._url} ({e.reason}). Run: ollama serve"
-            )
+            ) from e
 
         choice = body["choices"][0]
         usage = body.get("usage") or {}

@@ -6,7 +6,7 @@ import pytest
 from genesis.adapter import Completion
 from genesis.anthropic_adapter import SUPPORTED_MODELS
 from genesis.core import _create_plan, cmd_create, cmd_plan, cmd_scaffold, cmd_scaffold_file
-from genesis.errors import GenesisError, InputUnavailableError
+from genesis.errors import AdapterError, GenesisError, InputUnavailableError
 from genesis.fakes import FakeAdapter
 from genesis.interface import _prompt, _select_adapter, _select_model
 from genesis.ollama_adapter import SUPPORTED_MODELS as OLLAMA_MODELS
@@ -163,7 +163,7 @@ def test_cmd_scaffold_supported_plan_builds(tmp_path):
 
 def test_cmd_plan_reports_unreachable_server(monkeypatch, capsys):
     def boom(*a, **k):
-        raise ConnectionError("Could not reach Ollama at http://x. Run: ollama serve")
+        raise AdapterError("Could not reach Ollama at http://x. Run: ollama serve")
 
     monkeypatch.setattr(
         "genesis.core._build_adapter", lambda *a, **k: type("A", (), {"complete": boom})()
@@ -176,7 +176,7 @@ def test_cmd_plan_reports_unreachable_server(monkeypatch, capsys):
 
 def test_cmd_create_reports_unreachable_server(monkeypatch, capsys, tmp_path):
     def boom(*a, **k):
-        raise ConnectionError("Could not reach Ollama at http://x. Run: ollama serve")
+        raise AdapterError("Could not reach Ollama at http://x. Run: ollama serve")
 
     monkeypatch.setattr(
         "genesis.core._build_adapter", lambda *a, **k: type("A", (), {"complete": boom})()

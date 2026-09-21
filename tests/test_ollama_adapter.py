@@ -6,6 +6,7 @@ import urllib.request
 import pytest
 
 from genesis.adapter import Message, StopReason, ToolDef
+from genesis.errors import AdapterError
 from genesis.ollama_adapter import OllamaAdapter
 
 
@@ -105,14 +106,14 @@ def test_trailing_slash_in_base_url_is_normalised(monkeypatch):
     assert captured["request"].full_url == "http://host:1234/v1/chat/completions"
 
 
-def test_http_error_raises_value_error(monkeypatch):
+def test_http_error_raises_adapter_error(monkeypatch):
     def fake(request, timeout=None):
         raise urllib.error.HTTPError(
             request.full_url, 404, "Not Found", {}, io.BytesIO(b'{"error":"model not found"}')
         )
 
     monkeypatch.setattr("genesis.ollama_adapter.urllib.request.urlopen", fake)
-    with pytest.raises(ValueError, match="404"):
+    with pytest.raises(AdapterError, match="404"):
         OllamaAdapter(model="nope").complete([Message(role="user", content="hi")])
 
 
@@ -121,7 +122,7 @@ def test_connection_refused_raises_connection_error(monkeypatch):
         raise urllib.error.URLError("Connection refused")
 
     monkeypatch.setattr("genesis.ollama_adapter.urllib.request.urlopen", fake)
-    with pytest.raises(ConnectionError, match="ollama serve"):
+    with pytest.raises(AdapterError, match="ollama serve"):
         OllamaAdapter(model="m").complete([Message(role="user", content="hi")])
 
 
