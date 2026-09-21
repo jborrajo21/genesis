@@ -41,7 +41,7 @@
   h1 { font-size: 1.9rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
   h2 { font-size: 1.15rem; margin: 0 0 .5rem; letter-spacing: -.01em; }
   .lede { color: var(--muted); margin: 0 0 2rem; }
-  .lede a, footer a { color: var(--accent); }
+  .lede a { color: var(--accent); }
   section {
     background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
     padding: 20px; margin-bottom: 20px;
@@ -77,7 +77,14 @@
   .done { border-left: 2px solid var(--accent); padding-left: 14px; margin-bottom: 14px; font-size: .9rem; }
   .done p { margin: 0 0 .2rem; }
   .done .a { color: var(--muted); }
-  footer { color: var(--muted); font-size: .85rem; text-align: center; margin-top: 8px; }
+  /* Masked, but deliberately not type="password": a password field makes
+     browsers offer to save an API key into the password manager, which is both
+     a nuisance mid-flow and bad advice. Firefox has no text-security support,
+     so the key stays visible there. */
+  input.masked { -webkit-text-security: disc; font-family: var(--mono); }
+  details { margin-bottom: 14px; }
+  summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+  details[open] summary { margin-bottom: .6rem; }
   .spin { display: inline-block; animation: s 1s linear infinite; }
   @keyframes s { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
@@ -94,7 +101,10 @@
   <section>
     <h2>Scaffold a sample plan</h2>
     <p class="note">No API key, no account. This is the half the eval measures: a plan in, a repo out.</p>
-    <pre id="sample"></pre>
+    <details>
+      <summary>See the plan it builds from</summary>
+      <pre id="sample"></pre>
+    </details>
     <button id="scaffold-btn">Build this repo</button>
     <div class="status" id="scaffold-status" role="status" aria-live="polite"></div>
   </section>
@@ -116,7 +126,8 @@
 
     <div class="field">
       <label for="key">Anthropic API key</label>
-      <input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
+      <input id="key" type="text" class="masked" autocomplete="off" autocorrect="off"
+             autocapitalize="off" spellcheck="false" placeholder="sk-ant-...">
     </div>
     <div class="field">
       <label for="idea">Your idea</label>
@@ -139,9 +150,6 @@
     <div class="status" id="create-status" role="status" aria-live="polite"></div>
   </section>
 
-  <footer>
-    Built weekends-only. The planning half needs your key; the scaffolding half needs nothing.
-  </footer>
 </main>
 
 <script>
