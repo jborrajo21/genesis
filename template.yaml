@@ -16,6 +16,7 @@ Resources:
         Cors:
           AllowOrigins:
             - https://jborrajo21.github.io
+            - http://localhost:8000
           AllowMethods: [GET, POST]
           AllowHeaders: [content-type, anthropic-api-key]
           ExposeHeaders: [content-disposition, genesis-supported]

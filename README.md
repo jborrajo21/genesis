@@ -1,12 +1,12 @@
 # Genesis
 
-An AI agent that turns a project idea into a **structured, buildable plan** and a **scaffolded starter repo that installs and passes its own tests** — built **model-agnostic** and designed for **engineering rigour over vibe-coding**. Every architectural choice is written down in a decision log, every component is tested offline without touching a live API, and CI stays green.
+An AI agent that turns a project idea into a **structured, buildable plan** and a **scaffolded starter repo that installs and passes its own tests** — built **model-agnostic** and designed for **engineering rigour over vibe-coding**.
 
 ![CI](https://github.com/jborrajo21/genesis/actions/workflows/ci.yml/badge.svg)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/jborrajo21/genesis/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/genesis-agent.svg)](https://pypi.org/project/genesis-agent/)
 
-> **Status: in active development.** Everything works end to end — CLI, two model backends, a deterministic scaffolder gated in CI, and a three-tier eval measured across three models ([results](#eval-numbers)). The one thing missing is a **live deploy**, which is scheduled rather than skipped: targeted for mid-October, timed so the URL is alive through the winter rather than lapsing before anyone looks (D-050). See the [roadmap](#roadmap).
+> **Status: live.** Everything works end to end — CLI, two model backends, a deterministic scaffolder gated in CI, a three-tier eval measured across three models ([results](#eval-numbers)), and a **hosted API you can use without installing anything**: [try it](https://jborrajo21.github.io/genesis/). See the [roadmap](#roadmap).
 
 ## What it is
 
@@ -18,86 +18,6 @@ Most of Genesis is not the model call. The scaffolder runs with no LLM in the lo
 idea → clarifying questions → structured Plan → scaffolded repo (installs + tests pass)
                                     ↑ gated in CI by the deterministic eval harness
 ```
-
-## Quick start
-
-**From PyPI:**
-
-```bash
-pip install "genesis-agent[anthropic]"
-genesis create "a cli todo app" ~/my-todo
-```
-
-**From a clone** — same CLI, installed from source instead of the index:
-
-```bash
-git clone https://github.com/jborrajo21/genesis && cd genesis
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[anthropic]"
-genesis create "a cli todo app" ~/my-todo
-```
-
-Cloning alone is not enough: the `genesis` command is a console script, so it exists only once the
-package is installed. `pip install -e .` is what puts it on your PATH, and `-e` means your edits
-take effect without reinstalling. Add `dev` (`".[dev,anthropic]"`) if you also want to run the
-tests.
-
-Two things worth knowing about the names and extras:
-
-- **Installs as `genesis-agent`, runs as `genesis`.** The name `genesis` was already taken on PyPI
-  by an unrelated project, so only the distribution name changed — the import name, the package
-  directory and the command are all still `genesis`. **`pip install genesis` gets you someone
-  else's library**, and because it also installs a package called `genesis`, it will collide with
-  this one in the same environment.
-- **`[anthropic]` is the only extra you need, and only for the hosted backend.** It pulls in the
-  Anthropic SDK, which is deliberately not a default dependency (D-017) so the offline suite and CI
-  run without it. **Using a local model via Ollama needs no extra and no Python dependency at all** —
-  that adapter talks HTTP through the standard library, so plain `pip install genesis-agent` is the
-  whole install. What Ollama needs is the Ollama server itself, running locally.
-
-Genesis asks a few clarifying questions, plans, scaffolds the repo, then proves it works — in a
-throwaway virtualenv it installs the result, runs its command, runs its tests, and deletes the
-virtualenv again. What you get is the project, not the proof.
-
-Two backends, same commands:
-
-| | Hosted (Anthropic) | Local (Ollama) |
-|---|---|---|
-| Setup | `export ANTHROPIC_API_KEY=...` | `ollama serve` |
-| Invoke | `genesis create "idea" ./out` | `genesis create "idea" ./out --adapter ollama --model <your-model>` |
-| Cost | tokens | free |
-| Needs network | yes | no |
-| Plan quality | deeper plans (≈30 steps) | thinner (≈14 steps) — but **higher end-to-end success**, see [eval numbers](#eval-numbers) |
-
-Or run the steps separately — `genesis plan "idea" --output plan.json`, then
-`genesis scaffold plan.json ./out`. `scaffold` takes any valid plan JSON, including one you wrote
-yourself. Every argument is prompted for interactively if you omit it.
-
-**→ [Full command reference](#using-the-cli)** — all three commands, every flag, worked examples,
-running it in a container, and exit codes.
-
-### Credentials
-
-**Genesis never stores, caches or transmits your API key anywhere except to the provider you chose.**
-It holds no config file and reads no `.env` — the Anthropic SDK resolves credentials itself, from
-`ANTHROPIC_API_KEY` or an `ant auth login` profile, and Genesis passes nothing of its own.
-
-The local path needs no credential at all: `--adapter ollama` talks to a server on your own machine,
-and `genesis scaffold` needs no model whatsoever, so plans you already have cost nothing to build.
-
-## Built so far
-
-- **CLI** — `plan`, `scaffold`, `create`. Every positional argument is optional and prompted for when omitted, so it works interactively or scripted. Details in [Using the CLI](#using-the-cli).
-- **Python CLI template** — a minimal, correct reference repo (packaging, tests, lint, CI) that the scaffolder renders. Hand-built first, so its generated output is checked against something understood line by line.
-- **Model-agnostic adapter** — a `ModelAdapter` Protocol hiding the provider behind one `complete()` call, carrying tool definitions, a provider-neutral stop reason, and an optional response schema. Two adapters implement it: Anthropic (hosted) and Ollama (local). Nothing outside them imports a provider SDK, so models are swappable and the rest of the system is testable offline against a `FakeAdapter`.
-- **Ollama adapter — free, local, no API key** — talks to Ollama's OpenAI-compatible endpoint over stdlib `urllib`, adding no dependency. Planning runs on your own machine at zero token cost.
-- **Schema-constrained planning** — the planner sends a JSON schema and **both** adapters constrain decoding to it. That turned out to be decisive: it took hosted plan validity from 90% to 100%, and eliminated a failure mode where valid JSON followed by prose was rejected.
-- **Planner** — an adaptive, bounded loop: each round the model decides whether to ask more or plan, capped so it can never interrogate forever. A stack it can't scaffold still gets a plan plus a manual checklist rather than a refusal.
-- **Scaffolder** — deterministic, no LLM and no network beyond `pip`. Copies the template, renames the package across every coupled site, ships the plan as `PLAN.md`, and **verifies it installs, that its command actually runs, and that its tests pass** — in a throwaway virtualenv that is then removed, so the repo you get contains only its own files (36 KB, not 47 MB). CI runs that check on every push, so a broken render fails the build. Which template applies is a registry lookup on the recommended stack, so "unsupported" is the absence of a match rather than a maintained denylist.
-- **Agent loop** — a hand-built tool-using loop with guardrails (`max_turns`, a token budget) and per-run telemetry. Importable and tested (`from genesis.agent import Agent`), but the CLI does not use it — it is infrastructure for later work, not a dormant stub.
-- **Container image** — `python:3.11-slim`, non-root, no compiled dependencies and no `apt-get` layer. CI builds it every push and proves a repo scaffolded *inside the image* still installs and passes its tests.
-- **Typed failures, top to bottom** — every deliberate failure raises a `GenesisError` subclass rather than leaking a stdlib exception, so a missing template names the reinstall, an exhausted stdin names the argument to pass, and Ctrl-C exits 130 instead of printing a traceback. The package ships a `py.typed` marker, and `mypy` runs in CI **against the real Anthropic SDK**, so a change to the SDK's parameters fails the build rather than reaching users.
-- **A three-tier eval** — deterministic CI gates, a measured pipeline success rate across a local 8B model, Haiku and Sonnet, and a structural rubric over the saved plans. Every run is persisted, so it can be re-analysed without re-spending it. [The numbers, and what they don't say →](#eval-numbers)
 
 ## Eval numbers
 
@@ -142,118 +62,67 @@ stable property of an idea** — for identical input, Sonnet chose Python twice 
 **[Full results, methodology, scored predictions, and what these numbers don't say → `EVAL.md`](https://github.com/jborrajo21/genesis/blob/main/EVAL.md)**
 — including the bug this eval found in our own classifier, and a criticism of the eval's own idea set.
 
-## Using the CLI
+## Quick start
 
-Three commands. `plan` and `scaffold` are each independently useful; `create` chains them (D-033).
-
-```
-genesis plan      idea            → Plan JSON        (needs a model)
-genesis scaffold  plan JSON file  → working repo     (no model, no network beyond pip)
-genesis create    idea            → plan + repo      (both of the above)
-```
-
-**Every positional argument is optional.** Omit one and Genesis prompts for it, so `genesis create`
-with no arguments walks you through the whole thing. Pass them all and it never asks, which is what
-makes it scriptable.
-
-| Flag | Commands | Default | Notes |
-|---|---|---|---|
-| `--adapter` | `plan`, `create` | prompts | `anthropic` or `ollama` |
-| `--model` | `plan`, `create` | prompts | Menu of known models, or type any name — the list is a menu, not a whitelist (D-047) |
-| `--output` | `plan`, `create` | — | Save the plan JSON to a path |
-| `--force` | `scaffold`, `create` | off | Overwrite an existing output directory |
-| `--max-rounds` | `plan`, `create` | 6 | Cap on clarifying rounds — a ceiling, not a target |
-| `--max-tokens` | `plan`, `create` | 10000 | Per model call. Raise it if a plan is truncated |
-
-### End to end
-
-```
-$ genesis create "a cli todo app with local storage" ~/my-todo \
-    --adapter anthropic --model claude-haiku-4-5
-
-→ Planning...
-[Q1/3] What programming language and/or platform do you prefer (e.g., Python, Node.js, Go, Rust)?
-→ Python 3.11
-[Q2/3] Should todos support additional metadata like due dates, priority levels, or just a simple
-       text description?
-→ title and completion status only
-[Q3/3] What CLI interface style do you want: interactive menu-driven, command-based, or both?
-→ command-based
-✓ Plan created
-
-→ Scaffolding... ✓ Scaffolded to ~/my-todo
-✓ Build and tests passed
-
-Run:
-  cd ~/my-todo
-  python -m venv .venv && source .venv/bin/activate
-  pip install -e ".[dev]"
-```
-
-`Build and tests passed` is the point: Genesis created a throwaway virtualenv, installed the
-generated repo into it, ran its command and its test suite — then **deleted the virtualenv**, so
-what you get is 36 KB of project rather than 47 MB of someone else's environment.
-
-### Planning on its own
+**Without installing anything —** [jborrajo21.github.io/genesis](https://jborrajo21.github.io/genesis/), or straight at the API:
 
 ```bash
-$ genesis plan "a log file parser that summarises errors" --output plan.json
+# A plan in, a repo that installs and passes its own tests out. No API key.
+curl -X POST https://ggn3ce4m7r6f5surc5vosqwoai0oekcx.lambda-url.us-east-2.on.aws/scaffold \
+  -H 'content-type: application/json' -d @plan.json -o repo.zip
 ```
 
-Without `--output` the plan goes to stdout as JSON, so it pipes:
+**From PyPI:**
 
 ```bash
-$ genesis plan "a git commit message linter" --adapter ollama --model gemma4:latest | jq .stack
+pip install "genesis-agent[anthropic]"
+genesis create "a cli todo app" ~/my-todo
 ```
 
-A plan is a typed object — `project_name`, `summary`, `stack`, `phases[]`, `manual_checklist[]`,
-and `supported`. **`supported` is computed by Genesis from the recommended stack, never by the
-model** (D-028). When it is `false`, scaffolding writes `PLAN.md` and a `README.md` explaining that
-no code was generated, rather than forcing a Python CLI template onto a stack that does not fit.
-
-### Scaffolding a plan you already have
+**Locally, free, no key** — needs [Ollama](https://ollama.com) running:
 
 ```bash
-$ genesis scaffold plan.json ~/my-todo --force
+pip install genesis-agent
+genesis create "a cli todo app" ~/my-todo --adapter ollama --model <your-model>
 ```
 
-`scaffold` takes **any** valid plan JSON — one Genesis produced, or one you wrote by hand. It runs
-no model and needs no API key, so it is the fast, free, deterministic half of the pipeline.
+Genesis asks a few clarifying questions, plans, scaffolds the repo, then proves it works — in a
+throwaway virtualenv it installs the result, runs its command, runs its tests, and deletes the
+virtualenv again. What you get is the project, not the proof.
 
-### Running locally with Ollama
+**→ [Full command reference](https://github.com/jborrajo21/genesis/blob/main/USAGE.md)** — every
+command and flag, both backends, credentials, running it in a container, and exit codes.
 
-```bash
-$ ollama serve
-$ genesis create "a csv to json converter" ./out --adapter ollama --model llama3.1
-```
+## Hosted API
 
-No API key, no token cost. Plan quality tracks the local model — see [`EVAL.md`](https://github.com/jborrajo21/genesis/blob/main/EVAL.md), where
-the local model turns out to win end-to-end for a reason worth reading. Point Genesis at a remote
-Ollama with `GENESIS_OLLAMA_BASE_URL`. If the server is not running, Genesis says so and tells you
-how to start it rather than failing with a stack trace.
+Three endpoints, no account, nothing stored. The [demo page](https://jborrajo21.github.io/genesis/) is a thin frontend over them.
 
-### Running it in a container
+`https://ggn3ce4m7r6f5surc5vosqwoai0oekcx.lambda-url.us-east-2.on.aws`
 
-```bash
-docker build -t genesis .
-docker run --rm -v "$PWD:/work" genesis scaffold plan.json out
-```
+| Endpoint | Key | Returns |
+|---|---|---|
+| `POST /scaffold` | no | a zip of a repo that installs and passes its own tests |
+| `POST /plan` | yes | clarifying questions, or a finished plan |
+| `POST /create` | yes | clarifying questions, then the built repo as a zip |
 
-The image is `python:3.11-slim`, runs as a non-root user, and carries the template inside the
-installed package — so a container can scaffold and then **verify the result builds**, creating a
-virtualenv and running the generated repo's tests inside itself. CI builds the image on every push
-and fails if a repo scaffolded *inside the container* doesn't install and pass its own tests.
+**Your key is used for that one request and never stored, logged, or written to disk.** Send it as an `anthropic-api-key` header. Genesis keeps no session either — `/plan` and `/create` are stateless, so each call carries the rounds completed so far and the conversation lives in your request rather than on a server. If that isn't a trade you want to make, `pip install` does the same work locally and the key never leaves your machine.
 
-**For local use, `pip install` is better.** A CLI that writes files to your disk fits a container
-badly: you need a volume mount, and the output is owned by the container's user. The image exists
-so Genesis can be deployed, not so it can be installed.
+Scaffolding is keyless because template selection is deterministic — the same property that makes the CI gate and the offline test suite possible. Planning costs a round trip of 15–30 seconds each time it asks.
 
-### Exit codes
+## Built so far
 
-`0` success · `1` failure · `2` usage error from argument parsing · `130` interrupted with Ctrl-C.
-Failures print one actionable line to stderr — a missing plan key names the key; an unreachable
-Ollama server names the command to start it; a prompt with no input left tells you to pass the
-value as an argument instead.
+- **CLI** — `plan`, `scaffold`, `create`. Every positional argument is optional and prompted for when omitted, so it works interactively or scripted. Details in [Using the CLI](https://github.com/jborrajo21/genesis/blob/main/USAGE.md).
+- **Python CLI template** — a minimal, correct reference repo (packaging, tests, lint, CI) that the scaffolder renders. Hand-built first, so its generated output is checked against something understood line by line.
+- **Model-agnostic adapter** — a `ModelAdapter` Protocol hiding the provider behind one `complete()` call, carrying tool definitions, a provider-neutral stop reason, and an optional response schema. Two adapters implement it: Anthropic (hosted) and Ollama (local). Nothing outside them imports a provider SDK, so models are swappable and the rest of the system is testable offline against a `FakeAdapter`.
+- **Ollama adapter — free, local, no API key** — talks to Ollama's OpenAI-compatible endpoint over stdlib `urllib`, adding no dependency. Planning runs on your own machine at zero token cost.
+- **Schema-constrained planning** — the planner sends a JSON schema and **both** adapters constrain decoding to it. That turned out to be decisive for plan validity, and eliminated a failure mode where valid JSON followed by prose was rejected.
+- **Planner** — an adaptive, bounded loop: each round the model decides whether to ask more or plan, capped so it can never interrogate forever. A stack it can't scaffold still gets a plan plus a manual checklist rather than a refusal.
+- **Scaffolder** — deterministic, no LLM and no network beyond `pip`. Copies the template, renames the package across every coupled site, ships the plan as `PLAN.md`, and **verifies it installs, that its command actually runs, and that its tests pass** — in a throwaway virtualenv that is then removed, so the repo you get contains only its own files (36 KB, not 47 MB). CI runs that check on every push, so a broken render fails the build. Which template applies is a registry lookup on the recommended stack, so "unsupported" is the absence of a match rather than a maintained denylist.
+- **Agent loop** — a hand-built tool-using loop with guardrails (`max_turns`, a token budget) and per-run telemetry. Importable and tested (`from genesis.agent import Agent`), but the CLI does not use it — it is infrastructure for later work, not a dormant stub.
+- **Container image** — `python:3.11-slim`, no compiled dependencies and no `apt-get` layer. One Dockerfile, two final stages from a shared base: the CLI image runs non-root, the Lambda image omits `USER` because Lambda supplies its own least-privileged one. CI builds the CLI image every push and proves a repo scaffolded *inside it* still installs and passes its tests.
+- **Typed failures, top to bottom** — every deliberate failure raises a `GenesisError` subclass rather than leaking a stdlib exception, so a missing template names the reinstall, an exhausted stdin names the argument to pass, and Ctrl-C exits 130 instead of printing a traceback. The package ships a `py.typed` marker, and `mypy` runs in CI **against the real Anthropic SDK**, so a change to the SDK's parameters fails the build rather than reaching users.
+- **Live on AWS Lambda** — an HTTPS Function URL that costs nothing while idle, serving a keyless `/scaffold` and bring-your-own-key `/plan` and `/create`. Memory was sized from measurement (41 MB peak), not guesswork, and the guardrails are declared in a tracked SAM template rather than clicked into a console.
+- **A three-tier eval** — deterministic CI gates, a measured pipeline success rate across a local 8B model, Haiku and Sonnet, and a structural rubric over the saved plans. Every run is persisted, so it can be re-analysed without re-spending it. [The numbers, and what they don't say →](#eval-numbers)
 
 ## Roadmap
 
@@ -268,12 +137,12 @@ value as an argument instead.
 | — | CLI (`plan`/`scaffold`/`create`) + Ollama adapter — added outside the original 8 | ✅ |
 | — | Three-tier eval — CI gates, pipeline sweep across three models, structural rubric | ✅ |
 | — | Container image, CI-verified by scaffolding inside it | ✅ |
-| 7 | Live deploy — [deliberately deferred](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) to mid-October (D-050) | ⏸️ |
+| 7 | Live deploy — Lambda + Function URL, [hosted demo](https://jborrajo21.github.io/genesis/) | ✅ |
 | 8 | README + eval numbers + polish | ✅ |
 | — | Published to PyPI as [`genesis-agent`](https://pypi.org/project/genesis-agent/) | ✅ |
 
-**Next, in order:** the live deploy → a template registry with a second template, which is the only
-thing that would move the measured bottleneck.
+**Next:** a template registry with planner-emitted labels, which is the only thing that would move
+the measured bottleneck.
 
 The fourth rung on the eval ladder — a 1–2B local model, to see whether a free hosted planning tier
 was viable — was measured in September and **declined**: both candidates missed a threshold fixed
@@ -284,21 +153,8 @@ measurement rather than an omission.
 
 - **One model-agnostic seam.** The adapter Protocol is the boundary; the agent loop and planner depend on it, never on a provider SDK. Swap the model by swapping one class.
 - **Testable offline.** A scripted `FakeAdapter` drives the agent loop and planner in tests, and the Ollama adapter is tested against a patched HTTP layer — no network, no keys, no spend. Live tests exist but skip automatically without credentials or a local server, so CI stays secret-free and deterministic.
-- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) with constraint-based reasoning (D-001 … D-079 so far) — architecture, dependencies, trade-offs, and accepted costs.
+- **A decision log.** Every non-trivial choice is recorded in [`DECISIONS.md`](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) with constraint-based reasoning (D-001 … D-089 so far) — architecture, dependencies, trade-offs, and accepted costs.
 - **Minimalism as policy.** Every config line and schema field is generation + eval surface, so surface is added only when a constraint demands it.
-
-## Working on Genesis itself
-
-```bash
-git clone https://github.com/jborrajo21/genesis && cd genesis
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"      # add the anthropic extra for live use: ".[dev,anthropic]"
-pytest                        # offline suite — no API key needed
-ruff check . && ruff format --check .
-mypy                          # checks the Anthropic call against the installed SDK
-```
-
-Live tests are opt-in: the Anthropic smoke test runs only when `ANTHROPIC_API_KEY` is exported (D-018), and the Ollama one only when a local server with models is reachable. Both skip otherwise, so a bare `pytest` never spends tokens and CI stays secret-free. The CLI itself also authenticates from an `ant auth login` profile.
 
 ## Honest limitations (today)
 
@@ -328,13 +184,15 @@ Live tests are opt-in: the Anthropic smoke test runs only when `ANTHROPIC_API_KE
 
 **Not built**
 
-- The **live deploy** (Block 7) — deferred by decision, not oversight (D-050). The container image exists and is CI-verified, so the packaging half is done; nothing is hosted, and there is no IAM or TLS work to show.
+- **A free planning tier.** The hosted `/plan` and `/create` need your own Anthropic key. A small local model was measured against a threshold fixed before the run and missed it (D-072), so there is no free planning tier and [`EVAL.md`](https://github.com/jborrajo21/genesis/blob/main/EVAL.md) says why.
+- **Rate limiting on the hosted API.** Concurrency is bounded by the AWS account and a billing alarm, not by per-caller limits. It is a demo, and it can be busy.
 
 ## Docs
 
-- [`CONTRIBUTING.md`](https://github.com/jborrajo21/genesis/blob/main/CONTRIBUTING.md) — how to run it, how the project is organised, and how to contribute — pull requests are welcome under MIT with a `git commit -s` sign-off; there is no CLA.
+- [`USAGE.md`](https://github.com/jborrajo21/genesis/blob/main/USAGE.md) — the command reference: every command and flag, both backends, the container, exit codes.
 - [`EVAL.md`](https://github.com/jborrajo21/genesis/blob/main/EVAL.md) — full eval results: two runs, three models, scored predictions, findings, and limitations.
 - [`DECISIONS.md`](https://github.com/jborrajo21/genesis/blob/main/DECISIONS.md) — the decision log (every non-trivial choice, with constraint-based reasoning).
+- [`CONTRIBUTING.md`](https://github.com/jborrajo21/genesis/blob/main/CONTRIBUTING.md) — how to run the project and work on it — pull requests are welcome under MIT with a `git commit -s` sign-off; there is no CLA.
 
 ## Licence
 

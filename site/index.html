@@ -70,6 +70,9 @@
     padding: 12px; overflow-x: auto; font-family: var(--mono); font-size: .8rem; margin: 0 0 14px;
   }
   .status { margin-top: 14px; font-size: .92rem; min-height: 1.5em; }
+  /* Collapse while there is nothing to say, so a card's bottom padding matches
+     its top instead of reserving a line that is empty most of the time. */
+  .status:empty { margin-top: 0; min-height: 0; }
   .status.err { color: #b3261e; }
   @media (prefers-color-scheme: dark) { .status.err { color: #f2938c; } }
   .qa { border-left: 2px solid var(--line); padding-left: 14px; margin: 0 0 14px; }
@@ -95,7 +98,8 @@
   <h1>Genesis</h1>
   <p class="lede">
     An idea becomes a plan, and the plan becomes a Python CLI repo that installs and passes its own
-    tests. <a href="https://github.com/jborrajo21/genesis">Source and eval numbers on GitHub</a>.
+    tests. Anything that isn't a Python CLI still gets a plan — just no generated code, and the
+    repo says so. <a href="https://github.com/jborrajo21/genesis">Source and eval numbers on GitHub</a>.
   </p>
 
   <section>
