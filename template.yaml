@@ -10,8 +10,16 @@ Resources:
       Architectures: [arm64]
       MemorySize: 128
       Timeout: 60
+      # No ReservedConcurrentExecutions, Lambda requires at least 10 unreserved, account limit is 10
       FunctionUrlConfig:
         AuthType: NONE
+        Cors:
+          AllowOrigins:
+            - https://jborrajo21.github.io
+          AllowMethods: [GET, POST]
+          AllowHeaders: [content-type, anthropic-api-key]
+          ExposeHeaders: [content-disposition, genesis-supported]
+          MaxAge: 86400
 
     Metadata:
       DockerContext: .

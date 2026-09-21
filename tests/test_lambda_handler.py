@@ -83,9 +83,15 @@ def test_unknown_path_is_404():
     assert lh.handler(make_event(path="/nope"), None)["statusCode"] == 404
 
 
-def test_root_is_not_a_404():
-    """A link that 404s is worse than no link; the placeholder must still answer."""
-    assert lh.handler(make_event(method="GET", path="/"), None)["statusCode"] == 501
+def test_root_describes_the_api():
+    """A link that 404s is worse than no link. The root is the API root, not the
+    front door — that is the Pages site — so it lists endpoints rather than HTML."""
+    res = lh.handler(make_event(method="GET", path="/"), None)
+    assert res["statusCode"] == 200
+    body = json.loads(res["body"])
+    assert set(body["endpoints"]) == {"POST /scaffold", "POST /plan", "POST /create"}
+    assert lh._API_KEY_HEADER in body["authentication"]
+    assert "never stored" in body["authentication"]
 
 
 def test_scaffold_returns_a_buildable_repo_as_a_zip():
@@ -283,3 +289,96 @@ def test_the_key_never_reaches_a_log_line_or_a_response(monkeypatch, caplog):
     assert res["statusCode"] == 500
     assert KEY not in caplog.text
     assert KEY not in json.dumps(res)
+
+
+# --- /create ---------------------------------------------------------------
+
+READY_PLAN = {
+    "status": "ready",
+    "plan": {
+        "project_name": "Todo CLI",
+        "summary": "s",
+        "stack": ["Python 3.11"],
+        "phases": [{"name": "Core", "steps": ["add a task"]}],
+    },
+}
+
+
+def create_event(body, key=KEY):
+    headers = {"Anthropic-Api-Key": key} if key else {}
+    return make_event(path="/create", body=json.dumps(body), headers=headers)
+
+
+def test_create_without_a_key_is_401():
+    res = lh.handler(create_event({"idea": "a todo cli"}, key=None), None)
+    assert res["statusCode"] == 401
+
+
+def test_create_asks_questions_before_it_builds(monkeypatch):
+    """Same request and need_info shape as /plan — create is a planning round
+    that happens to end in an artefact."""
+    fake_adapter(monkeypatch, {"status": "need_info", "questions": ["Which storage?"]})
+    res = lh.handler(create_event({"idea": "a todo cli"}), None)
+    assert res["headers"]["Content-Type"] == "application/json"
+    assert json.loads(res["body"]) == {"status": "need_info", "questions": ["Which storage?"]}
+
+
+def test_create_returns_a_zip_once_ready(monkeypatch):
+    """The endpoint returns two media types: JSON while asking, zip when done."""
+    fake_adapter(monkeypatch, READY_PLAN)
+    res = lh.handler(
+        create_event({"idea": "a todo cli", "rounds": [{"questions": ["q"], "answers": ["a"]}]}),
+        None,
+    )
+    assert res["statusCode"] == 200
+    assert res["headers"]["Content-Type"] == "application/zip"
+    assert res["headers"]["Content-Disposition"] == 'attachment; filename="todo_cli.zip"'
+    assert res["isBase64Encoded"] is True
+    assert "todo_cli/pyproject.toml" in unzip(res).namelist()
+
+
+def test_create_carries_rounds_into_the_conversation(monkeypatch):
+    """The client holds the conversation; a dropped round would plan on the wrong input."""
+    captured = {}
+
+    class Fake:
+        def __init__(self, **kwargs):
+            pass
+
+        def complete(self, messages, tools=None, response_schema=None):
+            captured["messages"] = [m.content for m in messages]
+            return Completion(
+                text=json.dumps(READY_PLAN), tool_calls=[], usage=1, stop_reason=StopReason.DONE
+            )
+
+    monkeypatch.setattr(lh, "AnthropicAdapter", Fake)
+    lh.handler(
+        create_event(
+            {
+                "idea": "a todo cli",
+                "rounds": [{"questions": ["Which storage?"], "answers": ["JSON file"]}],
+            }
+        ),
+        None,
+    )
+    assert any("JSON file" in m for m in captured["messages"])
+
+
+def test_create_rejects_an_unknown_model(monkeypatch):
+    fake_adapter(monkeypatch, READY_PLAN)
+    res = lh.handler(create_event({"idea": "x", "model": "gpt-4"}), None)
+    assert res["statusCode"] == 400
+
+
+def test_create_leaves_no_temp_directory(monkeypatch):
+    fake_adapter(monkeypatch, READY_PLAN)
+    tmp = Path(tempfile.gettempdir())
+    before = set(tmp.iterdir())
+    lh.handler(create_event({"idea": "a todo cli"}), None)
+    assert set(tmp.iterdir()) == before
+
+
+def test_wrong_method_on_create_is_405():
+    res = lh.handler(make_event(method="GET", path="/create"), None)
+    assert res["statusCode"] == 405
+    assert res["headers"]["Allow"] == "POST"

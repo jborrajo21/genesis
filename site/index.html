@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Genesis — idea to a repo that builds</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfaf8;
+    --panel: #ffffff;
+    --ink: #1c1b19;
+    --muted: #6b6762;
+    --line: #e3dfd8;
+    --accent: #7c4a2d;
+    --accent-ink: #ffffff;
+    --warn-bg: #fdf6ec;
+    --warn-line: #e6d3b3;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171614;
+      --panel: #201f1c;
+      --ink: #eceae6;
+      --muted: #a29d96;
+      --line: #35332e;
+      --accent: #d08a5f;
+      --accent-ink: #1c1b19;
+      --warn-bg: #2a2317;
+      --warn-line: #4a3c24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: max(24px, env(safe-area-inset-top)) 16px max(48px, env(safe-area-inset-bottom));
+  }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.9rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
+  h2 { font-size: 1.15rem; margin: 0 0 .5rem; letter-spacing: -.01em; }
+  .lede { color: var(--muted); margin: 0 0 2rem; }
+  .lede a, footer a { color: var(--accent); }
+  section {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 20px; margin-bottom: 20px;
+  }
+  p.note { color: var(--muted); font-size: .9rem; margin: .4rem 0 1rem; }
+  label { display: block; font-weight: 600; font-size: .9rem; margin: 0 0 .3rem; }
+  input, textarea, select {
+    width: 100%; padding: 9px 11px; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
+  }
+  textarea { resize: vertical; min-height: 68px; }
+  .field { margin-bottom: 14px; }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer; padding: 10px 18px;
+    border-radius: 7px; border: 1px solid transparent;
+    background: var(--accent); color: var(--accent-ink);
+  }
+  button.secondary { background: transparent; color: var(--ink); border-color: var(--line); }
+  button[disabled] { opacity: .55; cursor: not-allowed; }
+  .keynote {
+    background: var(--warn-bg); border: 1px solid var(--warn-line);
+    border-radius: 7px; padding: 10px 12px; font-size: .85rem; margin-bottom: 14px;
+  }
+  pre {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
+    padding: 12px; overflow-x: auto; font-family: var(--mono); font-size: .8rem; margin: 0 0 14px;
+  }
+  .status { margin-top: 14px; font-size: .92rem; min-height: 1.5em; }
+  .status.err { color: #b3261e; }
+  @media (prefers-color-scheme: dark) { .status.err { color: #f2938c; } }
+  .qa { border-left: 2px solid var(--line); padding-left: 14px; margin: 0 0 14px; }
+  .qa p { margin: 0 0 .3rem; font-weight: 600; font-size: .92rem; }
+  .done { border-left: 2px solid var(--accent); padding-left: 14px; margin-bottom: 14px; font-size: .9rem; }
+  .done p { margin: 0 0 .2rem; }
+  .done .a { color: var(--muted); }
+  footer { color: var(--muted); font-size: .85rem; text-align: center; margin-top: 8px; }
+  .spin { display: inline-block; animation: s 1s linear infinite; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Genesis</h1>
+  <p class="lede">
+    An idea becomes a plan, and the plan becomes a Python CLI repo that installs and passes its own
+    tests. <a href="https://github.com/jborrajo21/genesis">Source and eval numbers on GitHub</a>.
+  </p>
+
+  <section>
+    <h2>Scaffold a sample plan</h2>
+    <p class="note">No API key, no account. This is the half the eval measures: a plan in, a repo out.</p>
+    <pre id="sample"></pre>
+    <button id="scaffold-btn">Build this repo</button>
+    <div class="status" id="scaffold-status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section>
+    <h2>Build from your own idea</h2>
+    <p class="note">
+      Genesis asks clarifying questions before it plans, so this takes a few rounds. Each one is a
+      call to Anthropic and takes 15–30 seconds.
+    </p>
+
+    <div class="keynote">
+      <strong>Your key is used for this request and nothing else.</strong> It is never stored,
+      logged, or written to disk — it is forwarded to Anthropic and discarded. The requests go
+      straight from your browser to the API. If you would rather not paste a key into a web page,
+      <a href="https://github.com/jborrajo21/genesis">install the CLI</a> and it never leaves your
+      machine.
+    </div>
+
+    <div class="field">
+      <label for="key">Anthropic API key</label>
+      <input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
+    </div>
+    <div class="field">
+      <label for="idea">Your idea</label>
+      <textarea id="idea" placeholder="a command-line tool that tracks how long I spend on each project"></textarea>
+    </div>
+    <div class="field">
+      <label for="model">Model</label>
+      <select id="model">
+        <option value="claude-haiku-4-5">claude-haiku-4-5 — fastest, cheapest</option>
+        <option value="claude-sonnet-5">claude-sonnet-5</option>
+        <option value="claude-opus-5">claude-opus-5</option>
+      </select>
+    </div>
+
+    <button id="create-btn">Start</button>
+    <button id="reset-btn" class="secondary" hidden>Start over</button>
+
+    <div id="history"></div>
+    <div id="questions"></div>
+    <div class="status" id="create-status" role="status" aria-live="polite"></div>
+  </section>
+
+  <footer>
+    Built weekends-only. The planning half needs your key; the scaffolding half needs nothing.
+  </footer>
+</main>
+
+<script>
+const API = "https://ggn3ce4m7r6f5surc5vosqwoai0oekcx.lambda-url.us-east-2.on.aws";
+
+const SAMPLE_PLAN = {
+  project_name: "Todo CLI",
+  summary: "A command-line todo list manager.",
+  stack: ["Python 3.11", "argparse"],
+  phases: [
+    { name: "Core", steps: ["add a task", "list tasks", "complete a task"] },
+    { name: "Storage", steps: ["persist tasks to JSON"] }
+  ],
+  manual_checklist: ["choose where the data file lives"]
+};
+
+const $ = (id) => document.getElementById(id);
+$("sample").textContent = JSON.stringify(SAMPLE_PLAN, null, 2);
+
+function say(el, msg, isError = false) {
+  el.textContent = msg;
+  el.classList.toggle("err", isError);
+}
+
+function busy(el, msg) {
+  el.classList.remove("err");
+  el.innerHTML = '<span class="spin">◐</span> ' + msg;
+}
+
+/* The browser can only read Content-Disposition because the Function URL lists
+   it in ExposeHeaders; without that this silently falls back to the default. */
+function filenameFrom(response, fallback) {
+  const header = response.headers.get("content-disposition") || "";
+  const match = header.match(/filename="([^"]+)"/);
+  return match ? match[1] : fallback;
+}
+
+async function download(response, fallback) {
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filenameFrom(response, fallback);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* Both /plan and /create answer with JSON while they are still asking and with
+   a zip once they are done, so every caller branches on the content type. */
+function isZip(response) {
+  return (response.headers.get("content-type") || "").includes("zip");
+}
+
+async function errorFrom(response) {
+  try {
+    const body = await response.json();
+    return body.message || `Request failed (${response.status})`;
+  } catch {
+    return `Request failed (${response.status})`;
+  }
+}
+
+/* --- sample scaffold, no key --- */
+
+$("scaffold-btn").addEventListener("click", async () => {
+  const btn = $("scaffold-btn");
+  const status = $("scaffold-status");
+  btn.disabled = true;
+  busy(status, "Building…");
+  try {
+    const res = await fetch(`${API}/scaffold`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(SAMPLE_PLAN)
+    });
+    if (!res.ok) throw new Error(await errorFrom(res));
+    await download(res, "genesis-repo.zip");
+    say(status, "Downloaded. Unzip it, then: pip install -e '.[dev]' && pytest");
+  } catch (err) {
+    say(status, err.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* --- create flow, BYOK, multi-round --- */
+
+let rounds = [];
+
+function renderHistory() {
+  $("history").innerHTML = rounds.flatMap((round) =>
+    round.questions.map((q, i) =>
+      `<div class="done">` +
+      `<p>${escapeHtml(q)}</p>` +
+      `<p class="a">${escapeHtml(round.answers[i])}</p>` +
+      `</div>`
+    )
+  ).join("");
+}
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function renderQuestions(questions) {
+  $("questions").innerHTML =
+    questions.map((q, i) =>
+      `<div class="qa"><p>${escapeHtml(q)}</p>` +
+      `<input id="ans-${i}" type="text" autocomplete="off"></div>`
+    ).join("") +
+    `<button id="answer-btn">Answer and continue</button>`;
+
+  $("answer-btn").addEventListener("click", () => {
+    const answers = questions.map((_, i) => $(`ans-${i}`).value.trim() || "no preference");
+    rounds.push({ questions, answers });
+    $("questions").innerHTML = "";
+    renderHistory();
+    step();
+  });
+  $("ans-0")?.focus();
+}
+
+async function step() {
+  const status = $("create-status");
+  const key = $("key").value.trim();
+  const idea = $("idea").value.trim();
+
+  if (!key) return say(status, "An Anthropic API key is needed for this half.", true);
+  if (!idea) return say(status, "Describe the thing you want built.", true);
+
+  $("create-btn").disabled = true;
+  $("reset-btn").hidden = false;
+  busy(status, rounds.length ? "Planning…" : "Thinking about your idea…");
+
+  try {
+    const res = await fetch(`${API}/create`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "anthropic-api-key": key },
+      body: JSON.stringify({ idea, rounds, model: $("model").value })
+    });
+    if (!res.ok) throw new Error(await errorFrom(res));
+
+    if (isZip(res)) {
+      const supported = res.headers.get("genesis-supported");
+      await download(res, "genesis-repo.zip");
+      say(status, supported === "false"
+        ? "Downloaded — but this stack has no automated scaffold, so it contains PLAN.md and a README, not code."
+        : "Downloaded. Unzip it, then: pip install -e '.[dev]' && pytest");
+      $("create-btn").disabled = false;
+      return;
+    }
+
+    const body = await res.json();
+    if (body.status === "need_info") {
+      say(status, "A few questions first — the answers change the plan.");
+      renderQuestions(body.questions);
+    } else {
+      say(status, "Unexpected response from the API.", true);
+      $("create-btn").disabled = false;
+    }
+  } catch (err) {
+    say(status, err.message, true);
+    $("create-btn").disabled = false;
+  }
+}
+
+$("create-btn").addEventListener("click", () => { rounds = []; renderHistory(); step(); });
+
+$("reset-btn").addEventListener("click", () => {
+  rounds = [];
+  $("history").innerHTML = "";
+  $("questions").innerHTML = "";
+  $("create-status").textContent = "";
+  $("create-btn").disabled = false;
+  $("reset-btn").hidden = true;
+});
+</script>
+</body>
+</html>

@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 from genesis.anthropic_adapter import SUPPORTED_MODELS, AnthropicAdapter
 from genesis.errors import AdapterAuthError, AdapterError, GenesisError
-from genesis.planner import Planner, QARound, _parse_plan
+from genesis.planner import Plan, Planner, QARound, RoundResult, _parse_plan
 from genesis.scaffolder import normalize, scaffold
 
 Response = dict[str, Any]
@@ -75,9 +75,13 @@ def _error(status: int, message: str, headers: dict[str, str] | None = None) -> 
 
 def _scaffold(req: Request) -> Response:
     """POST /scaffold — plan JSON in, repo as a zip out."""
+    return _scaffold_plan(_parse_plan(json.loads(req.body)))
+
+
+def _scaffold_plan(plan: Plan) -> Response:
+    """Render a plan into a temp dir and return it as a zip, leaving no trace."""
     tmp = Path(tempfile.mkdtemp())
     try:
-        plan = _parse_plan(json.loads(req.body))
         name = normalize(plan.project_name)
         repo = scaffold(plan, tmp / name)
         return _binary(
@@ -103,14 +107,13 @@ def _zip_dir(root: Path) -> bytes:
     return buf.getvalue()
 
 
-def _plan(req: Request) -> Response:
-    """POST /plan — run one planning round against the caller's own API key."""
+def _planning_round(req: Request) -> RoundResult | Response:
+    """Run one BYOK planning round, or return the response that refuses it."""
     key = req.headers.get(_API_KEY_HEADER)
     if not key:
         return _error(401, f"Send your Anthropic API key in the {_API_KEY_HEADER} header.")
 
     data = json.loads(req.body)
-    idea = data["idea"]
     model = data.get("model", _DEFAULT_MODEL)
     if model not in SUPPORTED_MODELS:
         allowed = ", ".join(SUPPORTED_MODELS)
@@ -118,23 +121,73 @@ def _plan(req: Request) -> Response:
 
     rounds = [QARound(**r) for r in data.get("rounds", [])]
     adapter = AnthropicAdapter(api_key=key, model=model, max_tokens=_MAX_TOKENS)
-    result = Planner(adapter).step(idea, rounds)
+    return Planner(adapter).step(data["idea"], rounds)
 
-    if result.status == "ready":
-        if result.plan is None:
-            raise RuntimeError("planner returned 'ready' without a plan")
-        return _json(200, {"status": "ready", "plan": asdict(result.plan)})
+
+def _questions(result: RoundResult) -> Response:
     return _json(200, {"status": "need_info", "questions": result.questions})
 
 
+def _ready_plan(result: RoundResult) -> Plan:
+    if result.plan is None:
+        raise RuntimeError("planner returned 'ready' without a plan")
+    return result.plan
+
+
+def _plan(req: Request) -> Response:
+    """POST /plan — run one planning round and return the plan or the questions."""
+    result = _planning_round(req)
+    if isinstance(result, dict):
+        return result
+    if result.status == "need_info":
+        return _questions(result)
+    return _json(200, {"status": "ready", "plan": asdict(_ready_plan(result))})
+
+
+def _create(req: Request) -> Response:
+    """POST /create — plan across rounds, then return the built repo once ready."""
+    result = _planning_round(req)
+    if isinstance(result, dict):
+        return result
+    if result.status == "need_info":
+        return _questions(result)
+    return _scaffold_plan(_ready_plan(result))
+
+
 def _index(req: Request) -> Response:
-    """GET / — Task 5. Until then, something better than a 404."""
-    return _error(501, "Nothing here yet. POST a plan JSON to /scaffold.")
+    """GET / — describe the API. The human-facing page lives on GitHub Pages."""
+    return _json(
+        200,
+        {
+            "service": "genesis",
+            "source": "https://github.com/jborrajo21/genesis",
+            "demo": "https://jborrajo21.github.io/genesis/",
+            "endpoints": {
+                "POST /scaffold": (
+                    "A plan JSON in, a zip of a repo that installs and passes its own "
+                    "tests out. No API key needed."
+                ),
+                "POST /plan": (
+                    "An idea plus any completed question rounds in; clarifying questions "
+                    "or a finished plan out."
+                ),
+                "POST /create": (
+                    "As /plan, but returns the built repo as a zip once the plan is ready."
+                ),
+            },
+            "authentication": (
+                f"/plan and /create need your own Anthropic API key in the "
+                f"{_API_KEY_HEADER} header. It is used for that request only and is "
+                f"never stored, logged, or written to disk."
+            ),
+        },
+    )
 
 
 _ROUTES: dict[str, dict[str, Callable[[Request], Response]]] = {
     "/scaffold": {"POST": _scaffold},
     "/plan": {"POST": _plan},
+    "/create": {"POST": _create},
     "/": {"GET": _index},
 }
 
