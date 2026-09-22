@@ -12,6 +12,6 @@
       "protocol": "HTTP/1.1"
     }
   },
-  "body": "{\"project_name\": \"Todo CLI\", \"summary\": \"A command-line todo list manager.\", \"stack\": [\"Python 3.11\", \"argparse\"], \"phases\": [{\"name\": \"Core\", \"steps\": [\"add a task\", \"list tasks\", \"complete a task\"]}, {\"name\": \"Storage\", \"steps\": [\"persist tasks to JSON\"]}], \"manual_checklist\": [\"choose where the data file lives\"]}",
+  "body": "{\"project_name\": \"Todo CLI\", \"summary\": \"A command-line todo list manager.\", \"stack\": [\"Python 3.11\", \"argparse\"], \"phases\": [{\"name\": \"Core\", \"steps\": [\"add a task\", \"list tasks\", \"complete a task\"]}, {\"name\": \"Storage\", \"steps\": [\"persist tasks to JSON\"]}], \"manual_checklist\": [\"choose where the data file lives\"], \"label\": {\"language\": \"python\", \"kind\": \"cli\"}}",
   "isBase64Encoded": false
 }

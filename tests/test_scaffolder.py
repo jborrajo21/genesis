@@ -16,6 +16,7 @@ def sample_plan():
         supported=True,
         phases=[Phase("Core", ["add task", "list tasks"])],
         manual_checklist=["create a data dir"],
+        label={"language": "python", "kind": "cli"},
     )
 
 

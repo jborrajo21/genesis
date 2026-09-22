@@ -37,7 +37,7 @@ def normalize(name: str) -> str:
 
 
 def scaffold(plan: Plan, target_dir: Path) -> Path:
-    template = select_template(plan.stack)
+    template = select_template(plan.label)
     if template is None:
         return _scaffold_generic(plan, target_dir)
 

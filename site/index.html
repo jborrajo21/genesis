@@ -250,7 +250,7 @@ function renderHistory() {
     round.questions.map((q, i) =>
       `<div class="done">` +
       `<p>${escapeHtml(q)}</p>` +
-      `<p class="a">${escapeHtml(round.answers[i])}</p>` +
+      `<p class="a">${escapeHtml(round.answers[i]) || "no preference"}</p>` +
       `</div>`
     )
   ).join("");
@@ -271,7 +271,7 @@ function renderQuestions(questions) {
     `<button id="answer-btn">Answer and continue</button>`;
 
   $("answer-btn").addEventListener("click", () => {
-    const answers = questions.map((_, i) => $(`ans-${i}`).value.trim() || "no preference");
+    const answers = questions.map((_, i) => $(`ans-${i}`).value.trim());
     rounds.push({ questions, answers });
     $("questions").innerHTML = "";
     renderHistory();

@@ -14,9 +14,11 @@ from genesis.planner import PlannerError
 
 PY = ["Python 3.11"]
 RUST = ["Rust", "clap"]
+# Support now follows the label, not the stack text (D-094).
+RUST_LABEL = {"language": "rust", "kind": "cli"}
 
 
-def _plan(stack):
+def _plan(stack, label=None):
     """A plan dict, as it appears inside a planner response and in a plan file."""
     return {
         "project_name": "todo",
@@ -24,12 +26,13 @@ def _plan(stack):
         "stack": stack,
         "phases": [{"name": "setup", "steps": ["init"]}],
         "manual_checklist": [],
+        "label": label if label is not None else {"language": "python", "kind": "cli"},
     }
 
 
-def _ready(stack):
+def _ready(stack, label=None):
     """A planner 'ready' response wrapping that plan."""
-    return json.dumps({"status": "ready", "plan": _plan(stack)})
+    return json.dumps({"status": "ready", "plan": _plan(stack, label)})
 
 
 @pytest.fixture
@@ -52,7 +55,7 @@ def test_create_plan_returns_plan(fake_adapter):
 
 
 def test_create_plan_marks_unsupported_stack(fake_adapter):
-    fake_adapter(_ready(RUST))
+    fake_adapter(_ready(RUST, RUST_LABEL))
     assert _create_plan("a todo app", "anthropic", "m").supported is False
 
 
@@ -78,7 +81,7 @@ def test_cmd_plan_unknown_adapter_exits_one(capsys):
 
 def test_cmd_scaffold_unsupported_skips_build(tmp_path):
     out = tmp_path / "gen"
-    assert cmd_scaffold(json.dumps(_plan(RUST)), str(out), False) == 0
+    assert cmd_scaffold(json.dumps(_plan(RUST, RUST_LABEL)), str(out), False) == 0
     assert (out / "PLAN.md").exists()
     assert not (out / "pyproject.toml").exists()
 
@@ -91,13 +94,13 @@ def test_cmd_scaffold_bad_json_exits_one(tmp_path, capsys):
 def test_cmd_scaffold_existing_dir_without_force_exits_one(tmp_path, capsys):
     out = tmp_path / "gen"
     out.mkdir()
-    assert cmd_scaffold(json.dumps(_plan(RUST)), str(out), False) == 1
+    assert cmd_scaffold(json.dumps(_plan(RUST, RUST_LABEL)), str(out), False) == 1
     assert "already exists" in capsys.readouterr().err
 
 
 def test_cmd_scaffold_file_reads_path(tmp_path):
     plan_file = tmp_path / "plan.json"
-    plan_file.write_text(json.dumps(_plan(RUST)))
+    plan_file.write_text(json.dumps(_plan(RUST, RUST_LABEL)))
     out = tmp_path / "gen"
     assert cmd_scaffold_file(str(plan_file), str(out), False) == 0
     assert (out / "PLAN.md").exists()
@@ -109,13 +112,13 @@ def test_cmd_scaffold_file_missing_path_exits_one(tmp_path, capsys):
 
 
 def test_cmd_create_hands_plan_content_to_scaffold(fake_adapter, tmp_path):
-    fake_adapter(_ready(RUST))
+    fake_adapter(_ready(RUST, RUST_LABEL))
     out = tmp_path / "gen"
     assert cmd_create("a todo app", str(out), "anthropic", "m", None, False, 6, 10000) == 0
 
 
 def test_cmd_create_saves_plan_when_output_given(fake_adapter, tmp_path):
-    fake_adapter(_ready(RUST))
+    fake_adapter(_ready(RUST, RUST_LABEL))
     saved = tmp_path / "plan.json"
     args = ("idea", str(tmp_path / "gen"), "anthropic", "m", str(saved), False, 6, 10000)
     assert cmd_create(*args) == 0
@@ -195,6 +198,10 @@ def test_cmd_create_reports_unreachable_server(monkeypatch, capsys, tmp_path):
         "[]",
         '"just a string"',
         "null",
+        # Wrong field types: these used to corrupt PLAN.md silently, or reach the
+        # user through the catch-all as "Unexpected error".
+        '{"project_name": "x", "summary": "s", "stack": "Python", "phases": []}',
+        '{"project_name": ["x"], "summary": "s", "stack": ["Python"], "phases": []}',
     ],
 )
 def test_cmd_scaffold_rejects_malformed_plans(payload, tmp_path, capsys):
@@ -213,7 +220,7 @@ def test_cmd_scaffold_accepts_plan_with_no_phases(tmp_path):
 
 
 def test_cmd_create_force_overwrites_a_previous_scaffold(fake_adapter, tmp_path, monkeypatch):
-    fake_adapter(_ready(RUST))
+    fake_adapter(_ready(RUST, RUST_LABEL))
     out = tmp_path / "gen"
     out.mkdir()
     (out / "PLAN.md").write_text("an earlier scaffold")
@@ -225,7 +232,7 @@ def test_cmd_create_force_overwrites_a_previous_scaffold(fake_adapter, tmp_path,
 
 
 def test_cmd_create_force_refuses_directory_genesis_did_not_create(fake_adapter, tmp_path, capsys):
-    fake_adapter(_ready(RUST))
+    fake_adapter(_ready(RUST, RUST_LABEL))
     out = tmp_path / "precious"
     out.mkdir()
     (out / "thesis.txt").write_text("irreplaceable")
@@ -237,7 +244,7 @@ def test_cmd_create_force_refuses_directory_genesis_did_not_create(fake_adapter,
 def test_cmd_create_without_force_refuses_when_not_a_tty(
     fake_adapter, tmp_path, monkeypatch, capsys
 ):
-    fake_adapter(_ready(RUST))
+    fake_adapter(_ready(RUST, RUST_LABEL))
     out = tmp_path / "gen"
     out.mkdir()
     monkeypatch.setattr("genesis.core.sys.stdin", io.StringIO())
@@ -246,7 +253,7 @@ def test_cmd_create_without_force_refuses_when_not_a_tty(
 
 
 def test_cmd_scaffold_unsupported_prints_no_setup_steps(tmp_path, capsys):
-    assert cmd_scaffold(json.dumps(_plan(RUST)), str(tmp_path / "gen"), False) == 0
+    assert cmd_scaffold(json.dumps(_plan(RUST, RUST_LABEL)), str(tmp_path / "gen"), False) == 0
     assert "Run:" not in capsys.readouterr().out
 
 

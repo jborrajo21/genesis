@@ -210,9 +210,38 @@ PlannerError: malformed 'ready' response, missing key: 'plan'
 ```
 
 The schema's `required` is `["status"]` alone, because `questions` and `plan` are alternatives — so
-`{"status": "ready"}` with no plan is **schema-valid and contract-invalid**. Expressing *"if ready,
-then plan is required"* needs `if`/`then` or `oneOf`, whose grammar support varies by backend, so
-this is documented rather than closed. Fifth defect surfaced by this population.
+`{"status": "ready"}` with no plan is **schema-valid and contract-invalid**. Fifth defect surfaced
+by this population, and the only one a shipped model has never produced: the three-model ladder did
+not emit a bare `ready` once in 60 plans.
+
+**Measured Sept 21, 2026 — ~60 calls through the real adapters.** The fix is a tagged union: two
+schema branches, each pinning `status` with a `const`, so the invalid response becomes *unreachable*
+to the grammar rather than caught afterwards. Three results, none of them in either provider's
+documentation:
+
+| | Anthropic | Ollama (llama.cpp) |
+|---|---|---|
+| `oneOf` | **rejected** — `400 … Schema type 'oneOf' is not supported` | accepted |
+| `anyOf` | accepted, both branches reachable | accepted, both branches reachable |
+| bare `ready` ever emitted | never | never — told to emit one, it invented a plan named `'placeholder'` |
+
+**And branch order changes what is generated, not merely what validates.** On a fully-specified idea
+ending *"Everything is decided; do not ask questions"*:
+
+| Branch order | Chose `ready` |
+|---|---|
+| `ready` first | **15/15** |
+| `need_info` first | **3/15** — it asked anyway, 80% of the time |
+
+Both orders correctly asked about a vague idea (*"an app"*, 30/30), so `ready`-first is strictly
+better rather than a trade-off.
+
+**That finding is why the union is not shipped (D-092).** It was to ride along with the
+planner-label change and share one eval re-run, which only works if it is a neutral refactor.
+Moving the ask/plan rate from 20% to 100% is a generation change, and bundling it would move two
+variables at once — the same objection that keeps a fresh idea set out of that run. The remaining
+option was a second re-run to delete an internal duplication, for a defect no shipped model
+produces. So the contract stays enforced in two places, deliberately.
 
 ### Accuracy by expectation — Sept 12
 

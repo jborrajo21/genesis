@@ -32,6 +32,7 @@ To plan:
   "project_name": "short-name",
   "summary": "one or two sentences on what it does",
   "stack": ["language + version", "key library", "storage", "..."],
+  "label": {"language": "python", "kind": "cli"},
   "phases": [
     {"name": "Phase name", "steps": ["concrete actionable step", "..."]},
     {"name": "Next phase", "steps": ["..."]}
@@ -41,6 +42,13 @@ To plan:
 
 Make phases sequential and each step concrete and actionable — a developer should know \
 exactly what to do. Do not include a "supported" field; that is determined elsewhere.
+
+"label" classifies the plan you just wrote. "language" is the primary implementation \
+language, lowercase ("python", "typescript", "go", "rust"). "kind" is what is being built, \
+lowercase, one or two words — "cli", "web app", "api", "library", "desktop app", "mobile \
+app", "data pipeline", "game". Use whatever describes it accurately; the list is examples, \
+not a menu. Label what the plan actually is, not what would be convenient: a plan whose \
+stack is FastAPI is an "api" even if a command-line interface is mentioned somewhere in it.
 """
 
 _PLAN_SCHEMA = {
@@ -67,14 +75,25 @@ _PLAN_SCHEMA = {
                     },
                 },
                 "manual_checklist": {"type": "array", "items": {"type": "string"}},
+                "label": {
+                    "type": "object",
+                    "properties": {
+                        "language": {"type": "string"},
+                        "kind": {"type": "string"},
+                    },
+                    "required": ["language", "kind"],
+                    "additionalProperties": False,
+                },
             },
-            "required": ["project_name", "summary", "stack", "phases"],
+            "required": ["project_name", "summary", "stack", "phases", "label"],
             "additionalProperties": False,
         },
     },
     "required": ["status"],
     "additionalProperties": False,
 }
+
+_NO_ANSWER = "no preference"
 
 
 @dataclass
@@ -90,6 +109,7 @@ class Plan:
     stack: list[str]
     supported: bool
     phases: list[Phase]
+    label: dict[str, str] | None = None
     manual_checklist: list[str] = field(default_factory=list)
 
 
@@ -110,14 +130,41 @@ class RoundResult:
     plan: Plan | None = None
 
 
+def _text(data: dict, key: str) -> str:
+    """Fetch a string field, or raise rather than let a wrong type crash later."""
+    value = data[key]
+    if not isinstance(value, str):
+        raise PlannerError(f"plan field {key!r} must be a string, got {type(value).__name__}")
+    return value
+
+
+def _str_list(data: dict, key: str, *, default: list[str] | None = None) -> list[str]:
+    """Fetch a list-of-strings field; a bare string here renders one bullet per character."""
+    value = data.get(key, default) if default is not None else data[key]
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise PlannerError(f"plan field {key!r} must be a list of strings")
+    return value
+
+
 def _parse_plan(data: dict) -> Plan:
+    if not isinstance(data, dict):
+        raise PlannerError(f"plan must be an object, got {type(data).__name__}")
+
+    label = data.get("label")
+    if label is not None and not isinstance(label, dict):
+        raise PlannerError(f"plan field 'label' must be an object, got {type(label).__name__}")
+    phases = data["phases"]
+    if not isinstance(phases, list):
+        raise PlannerError(f"plan field 'phases' must be a list, got {type(phases).__name__}")
+
     return Plan(
-        project_name=data["project_name"],
-        summary=data["summary"],
-        stack=data["stack"],
-        supported=select_template(data["stack"]) is not None,
-        phases=[Phase(name=p["name"], steps=p["steps"]) for p in data["phases"]],
-        manual_checklist=data.get("manual_checklist", []),
+        project_name=_text(data, "project_name"),
+        summary=_text(data, "summary"),
+        stack=_str_list(data, "stack"),
+        label=label,
+        supported=select_template(label) is not None,
+        phases=[Phase(name=_text(p, "name"), steps=_str_list(p, "steps")) for p in phases],
+        manual_checklist=_str_list(data, "manual_checklist", default=[]),
     )
 
 
@@ -130,7 +177,7 @@ def _extract_json(text: str) -> Any:
 
 
 def _format_qa(questions: list[str], answers: list[str]) -> str:
-    return "\n".join(f"Q: {q}\nA: {a}" for q, a in zip(questions, answers))
+    return "\n".join(f"Q: {q}\nA: {a.strip() or _NO_ANSWER}" for q, a in zip(questions, answers))
 
 
 class Planner:

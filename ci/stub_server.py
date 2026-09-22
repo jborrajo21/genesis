@@ -9,6 +9,7 @@ PLAN = {
         "project_name": "stub demo",
         "summary": "A command-line tool.",
         "stack": ["Python 3.11", "argparse"],
+        "label": {"language": "python", "kind": "cli"},
         "phases": [{"name": "Core", "steps": ["do the thing"]}],
         "manual_checklist": [],
     },

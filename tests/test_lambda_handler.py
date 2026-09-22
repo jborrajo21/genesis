@@ -32,7 +32,7 @@ def make_event(method="POST", path="/scaffold", body=None, b64=False, headers=No
     return event
 
 
-def plan_body(name="Todo CLI", stack=None):
+def plan_body(name="Todo CLI", stack=None, label=None):
     return json.dumps(
         {
             "project_name": name,
@@ -40,6 +40,7 @@ def plan_body(name="Todo CLI", stack=None):
             "stack": stack or ["Python 3.11", "argparse"],
             "phases": [{"name": "Core", "steps": ["add a task"]}],
             "manual_checklist": [],
+            "label": label if label is not None else {"language": "python", "kind": "cli"},
         }
     )
 
@@ -128,7 +129,8 @@ def test_content_disposition_filename_cannot_inject():
 
 
 def test_unsupported_stack_still_scaffolds_and_says_so():
-    res = lh.handler(make_event(body=plan_body(stack=["TypeScript", "React"])), None)
+    web = {"language": "typescript", "kind": "web app"}
+    res = lh.handler(make_event(body=plan_body(label=web)), None)
     assert res["statusCode"] == 200
     assert res["headers"]["Genesis-Supported"] == "false"
 
@@ -153,7 +155,7 @@ def test_no_temp_directory_survives_success_or_failure():
         ("not json", "Could not read the request body"),
         ("", "Could not read the request body"),
         ('{"project_name": "x"}', "Missing required key"),
-        ("[1, 2]", "expected a plan object"),
+        ("[1, 2]", "plan must be an object"),
     ],
 )
 def test_bad_bodies_are_400_with_a_useful_message(body, fragment):
@@ -248,6 +250,7 @@ def test_plan_ready_output_posts_straight_into_scaffold(monkeypatch):
                 "summary": "s",
                 "stack": ["Python 3.11"],
                 "phases": [{"name": "Core", "steps": ["add a task"]}],
+                "label": {"language": "python", "kind": "cli"},
             },
         },
     )
@@ -300,6 +303,7 @@ READY_PLAN = {
         "summary": "s",
         "stack": ["Python 3.11"],
         "phases": [{"name": "Core", "steps": ["add a task"]}],
+        "label": {"language": "python", "kind": "cli"},
     },
 }
 
