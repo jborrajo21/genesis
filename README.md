@@ -117,7 +117,7 @@ Scaffolding is keyless because template selection is deterministic — the same 
 - **Ollama adapter — free, local, no API key** — talks to Ollama's OpenAI-compatible endpoint over stdlib `urllib`, adding no dependency. Planning runs on your own machine at zero token cost.
 - **Schema-constrained planning** — the planner sends a JSON schema and **both** adapters constrain decoding to it. That turned out to be decisive for plan validity, and eliminated a failure mode where valid JSON followed by prose was rejected.
 - **Planner** — an adaptive, bounded loop: each round the model decides whether to ask more or plan, capped so it can never interrogate forever. A stack it can't scaffold still gets a plan plus a manual checklist rather than a refusal.
-- **Scaffolder** — deterministic, no LLM and no network beyond `pip`. Copies the template, renames the package across every coupled site, ships the plan as `PLAN.md`, and **verifies it installs, that its command actually runs, and that its tests pass** — in a throwaway virtualenv that is then removed, so the repo you get contains only its own files (36 KB, not 47 MB). CI runs that check on every push, so a broken render fails the build. Which template applies is a registry lookup on the recommended stack, so "unsupported" is the absence of a match rather than a maintained denylist.
+- **Scaffolder** — deterministic, no LLM and no network beyond `pip`. Copies the template, renames the package across every coupled site, ships the plan as `PLAN.md`, and **verifies it installs, that its command actually runs, and that its tests pass** — in a throwaway virtualenv that is then removed, so the repo you get contains only its own files (36 KB, not 47 MB). CI runs that check on every push, so a broken render fails the build. Which template applies is an exact lookup on a label the planner emits, so "unsupported" is the absence of a match rather than a maintained denylist.
 - **Agent loop** — a hand-built tool-using loop with guardrails (`max_turns`, a token budget) and per-run telemetry. Importable and tested (`from genesis.agent import Agent`), but the CLI does not use it — it is infrastructure for later work, not a dormant stub.
 - **"It builds" is a CI gate, not a claim** — every push generates repos and, for each, creates a fresh virtualenv, installs it, runs its console script and runs its own tests. Three independent paths: from a plan, end-to-end from an idea against a stub model server with no key and no network, and *inside the published container image*. A render that stops building fails the build.
 - **Container image** — `python:3.11-slim`, no compiled dependencies and no `apt-get` layer. One Dockerfile, two final stages from a shared base: the CLI image runs non-root, the Lambda image omits `USER` because Lambda supplies its own least-privileged one. Both are gated — the CLI image by the scaffold-and-build check above, the Lambda image by invoking the handler with a real Function URL event and asserting it returns a valid repo. **The handler deliberately does not build what it returns**: that would mean a virtualenv and a `pip install` inside an HTTP request, and CI has already proved the render builds.
@@ -142,8 +142,9 @@ Scaffolding is keyless because template selection is deterministic — the same 
 | 8 | README + eval numbers + polish | ✅ |
 | — | Published to PyPI as [`genesis-agent`](https://pypi.org/project/genesis-agent/) | ✅ |
 
-**Next:** a template registry with planner-emitted labels, which is the only thing that would move
-the measured bottleneck.
+**Next:** re-measuring what planner-emitted labels actually did. The code is in; the first attempt
+to quantify it measured a prompt-priming artefact instead and was discarded (D-095). After that, a
+second template — which is the only thing that would move the measured bottleneck.
 
 The fourth rung on the eval ladder — a 1–2B local model, to see whether a free hosted planning tier
 was viable — was measured in September and **declined**: both candidates missed a threshold fixed
@@ -162,13 +163,14 @@ measurement rather than an omission.
 **What it generates**
 
 - The scaffolder renders **one template** (Python CLI) and produces a **skeleton, not a finished project**. It proves generation *correctness* — a valid, installable, test-passing repo for any project name — not that the app does what the plan describes. The plan rides along in `PLAN.md` to build from.
-- Anything else gets an honest "unsupported" plan plus a manual checklist. Which template applies is a **keyword match on the recommended stack**, which is the weak link below.
+- Anything else gets an honest "unsupported" plan plus a manual checklist. Which template applies is an **exact lookup on a label the planner emits beside the plan** — `{"language": "python", "kind": "cli"}` — not a search of the stack text. **The eval numbers above predate that change** and were measured with the keyword matcher it replaced; see the weak point below.
 - Name normalisation **drops non-ASCII** rather than transliterating: `Ünicode Tool` becomes `nicode_tool`. Valid and installable, not what you'd have named it.
 
 **Stack classification — the known weak point**
 
-- **One incidental word can veto a scaffoldable plan.** A plan listing `Python 3.10+`, `Jinja2`, `watchdog` and *"Flask or http.server for dev server"* is refused, because the stack is matched as one string and any excluded marker wins. No keyword rule fixes this — whether Flask is the architecture or an optional dev server isn't information keywords carry. The fix is having the planner label its own plan (`{"language": "python", "kind": "cli"}`) and doing exact lookup; it is designed but not built.
-- **Stack choice is the whole remaining gap** in end-to-end success, and it is **unstable run to run** for the hosted models: for identical input, Sonnet chose Python twice out of four runs. Single-run numbers are samples, not measurements.
+- **The matcher that caused this is gone; the improvement is unmeasured.** Until Sept 2026 the stack was joined into one string and the template refused if any excluded word appeared anywhere in it — so a plan was refused for saying it was *not* a web app. `["Python 3.11", "requests", "beautifulsoup4 for web scraping"]` lost on `web`; `"a GUI is out of scope"` lost on `gui`. No keyword rule fixes that: you cannot match your way out of a negation without parsing English. Selection is now an exact lookup on a planner-emitted label, which cannot fail that way by construction — but **the eval re-run that would quantify it has not produced a usable result**, so the numbers above remain the honest ones.
+- **The first attempt at that re-run measured the wrong thing, and is not published.** It returned a perfect classification score and idea→buildable at 13/13 — while **no plan kept the stack it had before**, because the instruction listed `python` and `cli` first among its examples and primed the models toward both. That is a generation change masquerading as a classification fix, and publishing it would have replaced a real finding with an artefact. Written up in `DECISIONS.md` (D-095).
+- **Stack choice is the remaining gap**, and it is **unstable run to run**: for identical input Sonnet picked Python twice out of four. Two full runs of unchanged code moved Sonnet 6/13 → 9/13 on idea→buildable, so the noise floor is around ±3 ideas per model and single-run comparisons of it prove little.
 
 **Planning**
 

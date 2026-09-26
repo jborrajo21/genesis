@@ -126,6 +126,13 @@ documented.
 
 One accuracy number would conflate three questions with three different owners.
 
+**Scored across the whole persisted corpus (Sept 26, 2026): the classifier was right on 150 of
+151 recorded plans.** Seven Python-primary plans were refused, and six of those refusals were
+correct — a Django REST API is Python, but it is a web API, not a CLI. **The corpus contains one
+genuine classifier error**: a static site generator whose stack listed *"Flask or http.server for
+dev server"*, refused on the word `Flask`. The "Python plans accepted" column below is the
+classifier's own number; the other two columns belong to the model and to the pipeline.
+
 **Sept 12:**
 
 | Model | Recommended Python | Python plans accepted | Idea → buildable repo |
@@ -267,6 +274,27 @@ produces. So the contract stays enforced in two places, deliberately.
 **`supported` is not a stable property of an idea.** For identical input, Sonnet picked Python twice out of four and Haiku three out of four; on Sept 2 the patterns differed again (`T,F,F,F` and `T,T,T,T`). Any single-run accuracy figure is a sample from a distribution, not a measurement of the system. The variance repeats were the most cuttable item in the plan and turned out to carry the most weight.
 
 The local model was stable across both runs — which is consistent with the mechanism above: a model that always reaches for Python has nothing to be unstable about.
+
+#### And the headline metric moves too — measured Sept 23, 2026
+
+The repeats above sample one idea four times. Comparing the **two full runs** answers the
+broader question, since Sept 2 and Sept 12 ran identical code with nothing between them that
+touched stack choice:
+
+| Model | Sept 2 | Sept 12 |
+|---|---|---|
+| claude-haiku-4-5 | 9/11 | 9/13 |
+| claude-sonnet-5 | **6/13** | **9/13** |
+| gemma4:latest | 12/13 | 12/13 |
+
+**Sonnet moved three ideas on identical code, and 5 of 28 expected-supported ideas flipped
+outcome across the two runs.** So the noise floor on idea → buildable is roughly **±3 ideas per
+model**, and a single run of it distinguishes very little. Every figure in this document is one
+run unless it says otherwise; read them accordingly.
+
+This was computed from data already on disk, after a later run was over-interpreted as a large
+improvement — a reminder that the persisted corpus answers questions retrospectively for free,
+and that the cheapest analysis is often the one nobody ran.
 
 ### One unexplained result
 

@@ -32,7 +32,7 @@ To plan:
   "project_name": "short-name",
   "summary": "one or two sentences on what it does",
   "stack": ["language + version", "key library", "storage", "..."],
-  "label": {"language": "python", "kind": "cli"},
+  "label": {"language": "<primary language>", "kind": "<what is being built>"},
   "phases": [
     {"name": "Phase name", "steps": ["concrete actionable step", "..."]},
     {"name": "Next phase", "steps": ["..."]}
@@ -44,11 +44,15 @@ Make phases sequential and each step concrete and actionable — a developer sho
 exactly what to do. Do not include a "supported" field; that is determined elsewhere.
 
 "label" classifies the plan you just wrote. "language" is the primary implementation \
-language, lowercase ("python", "typescript", "go", "rust"). "kind" is what is being built, \
-lowercase, one or two words — "cli", "web app", "api", "library", "desktop app", "mobile \
-app", "data pipeline", "game". Use whatever describes it accurately; the list is examples, \
-not a menu. Label what the plan actually is, not what would be convenient: a plan whose \
-stack is FastAPI is an "api" even if a command-line interface is mentioned somewhere in it.
+language, lowercase. "kind" is what is being built, lowercase, one or two words. Both lists \
+below are alphabetical examples, not menus — use whatever describes the plan accurately, \
+including values not listed.
+
+  language: go, java, javascript, python, ruby, rust, swift, typescript
+  kind: api, cli, data pipeline, desktop app, game, library, mobile app, web app
+
+Label what the plan actually is, not what would be convenient: a plan whose stack is \
+FastAPI is an "api" even if a command-line interface is mentioned somewhere in it.
 """
 
 _PLAN_SCHEMA = {
