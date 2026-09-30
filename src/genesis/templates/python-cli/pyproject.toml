@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "greetly"
 version = "0.1.0"
-description = "A tiny greeting CLI"
+description = "A small command-line tool"
 requires-python = ">=3.11"
 dependencies = []
 
@@ -13,7 +13,12 @@ dependencies = []
 greetly = "greetly.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff"]
+dev = ["pytest", "ruff", "mypy"]
+
+[tool.mypy]
+files = ["src"]
+python_version = "3.11"
+disallow_untyped_defs = true
 
 [tool.ruff]
 line-length = 100

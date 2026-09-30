@@ -1,21 +1,35 @@
 import argparse
-from importlib.metadata import version
+import sys
+from importlib.metadata import PackageNotFoundError, version
 
-from greetly.core import greet
+from greetly.core import AppError, run
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(prog="greetly", description="greet user")
-    parser.add_argument("--version", action="version", version=version("greetly"))
+def _version() -> str:
+    """The installed version, or a placeholder when running from a source tree."""
+    try:
+        return version("greetly")
+    except PackageNotFoundError:
+        return "0.0.0+unknown"
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="greetly")
+    parser.add_argument("--version", action="version", version=_version())
 
     subparsers = parser.add_subparsers(dest="command", required=True)
-    greet_parser = subparsers.add_parser("greet", help="Say hello to said user")
-    greet_parser.add_argument("name")
+    run_parser = subparsers.add_parser("run", help="run the tool")
+    run_parser.add_argument("target", nargs="?", default=None, help="what to run against")
 
     args = parser.parse_args(argv)
 
-    if args.command == "greet":
-        print(greet(args.name))
+    try:
+        if args.command == "run":
+            print(run(args.target))
         return 0
-
-    return 0
+    except AppError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("cancelled", file=sys.stderr)
+        return 130

@@ -1,11 +1,13 @@
 import hashlib
+import shutil
 import tomllib
 from pathlib import Path
 
 import pytest
 
 from genesis.planner import Phase, Plan
-from genesis.scaffolder import normalize, scaffold
+from genesis.scaffolder import normalize, scaffold, template_dir
+from genesis.template_registry import PYTHON_CLI
 
 
 def sample_plan():
@@ -37,6 +39,7 @@ def test_scaffold_structure(tmp_path):
     assert 'name = "todo_app"' in text
     assert "A command-line todo list manager." in text
     assert (out / ".gitignore").exists()
+    assert "A command-line todo list manager." in (out / "README.md").read_text()
 
 
 def test_no_stray_greetly(tmp_path):
@@ -98,3 +101,21 @@ def test_summary_with_quotes_keeps_pyproject_valid(tmp_path):
     plan.summary = 'A "quoted" tool.\nWith a newline.'
     out = scaffold(plan, tmp_path / "gen")
     tomllib.loads((out / "pyproject.toml").read_text())
+
+
+def _cache_part(rel_path):
+    return any(p == "__pycache__" or p.endswith("_cache") for p in rel_path.parts)
+
+
+def test_scaffold_skips_caches_and_copies_binaries(tmp_path, monkeypatch):
+    fake = tmp_path / "template"
+    shutil.copytree(template_dir(PYTHON_CLI), fake)
+    (fake / ".mypy_cache" / "3.11").mkdir(parents=True)
+    (fake / ".mypy_cache" / "3.11" / "cache.db").write_bytes(b"\x89\x95\xff")
+    (fake / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00\x95")
+    monkeypatch.setattr("genesis.scaffolder.template_dir", lambda t: fake)
+
+    out = scaffold(sample_plan(), tmp_path / "gen")
+
+    assert not [p for p in out.rglob("*") if _cache_part(p.relative_to(out))]
+    assert (out / "logo.png").read_bytes().startswith(b"\x89PNG")

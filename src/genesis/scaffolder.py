@@ -46,12 +46,15 @@ def scaffold(plan: Plan, target_dir: Path) -> Path:
     shutil.copytree(
         template_dir(template),
         target_dir,
-        ignore=shutil.ignore_patterns(".pytest_cache", ".ruff_cache", "__pycache__"),
+        ignore=shutil.ignore_patterns(".*_cache", "__pycache__"),
     )
 
     for path in target_dir.rglob("*"):
         if path.is_file():
-            text = path.read_text()
+            try:
+                text = path.read_text()
+            except UnicodeDecodeError:
+                continue
             if template.package in text:
                 path.write_text(text.replace(template.package, name))
 
@@ -61,6 +64,8 @@ def scaffold(plan: Plan, target_dir: Path) -> Path:
     pyproject.write_text(
         pyproject.read_text().replace(f'"{template.description}"', json.dumps(plan.summary))
     )
+    readme = target_dir / "README.md"
+    readme.write_text(readme.read_text().replace(template.summary_placeholder, plan.summary))
     (target_dir / "PLAN.md").write_text(_render_plan_md(plan))
 
     return target_dir

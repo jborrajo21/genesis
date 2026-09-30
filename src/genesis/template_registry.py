@@ -12,15 +12,17 @@ class Template:
     description: str  # placeholder description in its pyproject.toml
     language: str  # matched against the planner's label, exactly and lowercased
     kind: str
+    summary_placeholder: str  # placeholder summary line in its README.md
 
 
 PYTHON_CLI = Template(
     name="python-cli",
     path="python-cli",
     package="greetly",
-    description="A tiny greeting CLI",
+    description="A small command-line tool",
     language="python",
     kind="cli",
+    summary_placeholder="Describe your project here.",
 )
 
 TEMPLATES: tuple[Template, ...] = (PYTHON_CLI,)

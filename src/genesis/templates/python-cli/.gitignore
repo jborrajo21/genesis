@@ -12,6 +12,7 @@ venv/
 # Tooling caches
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 
 # OS
 .DS_Store
