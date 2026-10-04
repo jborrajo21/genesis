@@ -12,7 +12,9 @@ def main(argv=None):
     subparsers = parser.add_subparsers(dest="command", required=True)
     plan_parser = subparsers.add_parser("plan", help="create a structured plan from an idea")
     plan_parser.add_argument("idea", nargs="?", default=None, help="project idea")
-    plan_parser.add_argument("--adapter", default=None, help="Adapter to use (anthropic or ollama)")
+    plan_parser.add_argument(
+        "--adapter", default=None, help="Adapter to use (anthropic, ollama or openai)"
+    )
     plan_parser.add_argument("--model", default=None, help="Model name")
     plan_parser.add_argument("--output", type=str, help="path to save plan JSON")
     plan_parser.add_argument("--max-rounds", type=int, default=6, help="max planning rounds")
@@ -37,7 +39,7 @@ def main(argv=None):
         "output_dir", nargs="?", default=None, help="directory to scaffold into"
     )
     create_parser.add_argument(
-        "--adapter", default=None, help="Adapter to use (anthropic or ollama)"
+        "--adapter", default=None, help="Adapter to use (anthropic, ollama or openai)"
     )
     create_parser.add_argument("--model", default=None, help="Model name")
     create_parser.add_argument("--output", type=str, help="path to save plan JSON")

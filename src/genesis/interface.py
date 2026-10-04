@@ -4,6 +4,7 @@ from pathlib import Path
 from genesis.anthropic_adapter import SUPPORTED_MODELS as ANTHROPIC_MODELS
 from genesis.errors import InputUnavailableError
 from genesis.ollama_adapter import SUPPORTED_MODELS as OLLAMA_MODELS
+from genesis.openai_adapter import SUPPORTED_MODELS as OPENAI_MODELS
 
 
 def _prompt(message: str) -> str:
@@ -77,11 +78,14 @@ def _select_adapter() -> str:
     print("\nChoose adapter:")
     print("1) Anthropic")
     print("2) Ollama")
+    print("3) OpenAI")
     choice = _prompt("→ ")
     if choice == "1":
         return "anthropic"
     elif choice == "2":
         return "ollama"
+    elif choice == "3":
+        return "openai"
     else:
         raise ValueError("Invalid choice")
 
@@ -92,6 +96,8 @@ def _select_model(adapter: str) -> str:
         models = ANTHROPIC_MODELS
     elif adapter == "ollama":
         models = OLLAMA_MODELS
+    elif adapter == "openai":
+        models = OPENAI_MODELS
     else:
         raise ValueError(f"Unknown adapter: {adapter}")
 

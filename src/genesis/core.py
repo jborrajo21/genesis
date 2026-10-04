@@ -22,6 +22,7 @@ from genesis.interface import (
     print_success,
 )
 from genesis.ollama_adapter import OllamaAdapter
+from genesis.openai_adapter import OpenAICompatibleAdapter
 from genesis.planner import Plan, Planner, PlannerError, _parse_plan
 from genesis.scaffolder import build_and_test, scaffold
 
@@ -37,6 +38,8 @@ def _build_adapter(adapter_str: str, model: str, max_tokens: int) -> ModelAdapte
             )
     if adapter_str == "ollama":
         return OllamaAdapter(model=model, max_tokens=max_tokens)
+    if adapter_str == "openai":
+        return OpenAICompatibleAdapter(model=model, max_tokens=max_tokens)
     else:
         raise ValueError(f"Unknown adapter: {adapter_str}")
 

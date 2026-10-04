@@ -5,11 +5,19 @@ import pytest
 
 from genesis.adapter import Completion
 from genesis.anthropic_adapter import SUPPORTED_MODELS
-from genesis.core import _create_plan, cmd_create, cmd_plan, cmd_scaffold, cmd_scaffold_file
+from genesis.core import (
+    _build_adapter,
+    _create_plan,
+    cmd_create,
+    cmd_plan,
+    cmd_scaffold,
+    cmd_scaffold_file,
+)
 from genesis.errors import AdapterError, GenesisError, InputUnavailableError
 from genesis.fakes import FakeAdapter
 from genesis.interface import _prompt, _select_adapter, _select_model
 from genesis.ollama_adapter import SUPPORTED_MODELS as OLLAMA_MODELS
+from genesis.openai_adapter import OpenAICompatibleAdapter
 from genesis.planner import PlannerError
 
 PY = ["Python 3.11"]
@@ -149,7 +157,11 @@ def test_select_model_accepts_custom_name(monkeypatch):
 
 def test_select_model_rejects_unknown_adapter():
     with pytest.raises(ValueError):
-        _select_model("openai")
+        _select_model("foo")
+
+
+def test_build_adapter_returns_openai_adapter():
+    assert isinstance(_build_adapter("openai", "m", 100), OpenAICompatibleAdapter)
 
 
 def test_select_model_offers_ollama_models(monkeypatch):

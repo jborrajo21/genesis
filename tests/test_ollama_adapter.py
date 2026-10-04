@@ -34,9 +34,7 @@ def _fake_urlopen(body, captured=None):
 
 
 def _patch(monkeypatch, body, captured=None):
-    monkeypatch.setattr(
-        "genesis.ollama_adapter.urllib.request.urlopen", _fake_urlopen(body, captured)
-    )
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen(body, captured))
 
 
 def test_complete_maps_response(monkeypatch):
@@ -97,6 +95,16 @@ def test_request_shape(monkeypatch):
     ]
 
 
+def test_ollama_sends_no_authorization_even_when_openai_key_is_set(monkeypatch):
+    """D-103: OllamaAdapter declares api_key_env=None, so an OPENAI_API_KEY in the
+    environment must not reach a local server or ci/stub_server.py."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-must-not-be-sent")
+    captured = {}
+    _patch(monkeypatch, _body(), captured)
+    OllamaAdapter(model="m").complete([Message(role="user", content="hi")])
+    assert "Authorization" not in captured["request"].headers
+
+
 def test_trailing_slash_in_base_url_is_normalised(monkeypatch):
     captured = {}
     _patch(monkeypatch, _body(), captured)
@@ -112,16 +120,16 @@ def test_http_error_raises_adapter_error(monkeypatch):
             request.full_url, 404, "Not Found", {}, io.BytesIO(b'{"error":"model not found"}')
         )
 
-    monkeypatch.setattr("genesis.ollama_adapter.urllib.request.urlopen", fake)
+    monkeypatch.setattr("urllib.request.urlopen", fake)
     with pytest.raises(AdapterError, match="404"):
         OllamaAdapter(model="nope").complete([Message(role="user", content="hi")])
 
 
-def test_connection_refused_raises_connection_error(monkeypatch):
+def test_connection_refused_raises_adapter_error(monkeypatch):
     def fake(request, timeout=None):
         raise urllib.error.URLError("Connection refused")
 
-    monkeypatch.setattr("genesis.ollama_adapter.urllib.request.urlopen", fake)
+    monkeypatch.setattr("urllib.request.urlopen", fake)
     with pytest.raises(AdapterError, match="ollama serve"):
         OllamaAdapter(model="m").complete([Message(role="user", content="hi")])
 

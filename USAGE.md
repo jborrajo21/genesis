@@ -49,6 +49,8 @@ reinstalling.
 It holds no config file and reads no `.env` — the Anthropic SDK resolves credentials itself, from
 `ANTHROPIC_API_KEY` or an `ant auth login` profile, and Genesis passes nothing of its own.
 
+The `openai` adapter reads `OPENAI_API_KEY`, or takes a key explicitly in library use. It sends `Authorization: Bearer …` only when a key resolves, which is what lets the same class serve a keyless local server and a keyed hosted provider.
+
 The local path needs no credential at all: `--adapter ollama` talks to a server on your own machine,
 and `genesis scaffold` needs no model whatsoever, so plans you already have cost nothing to build.
 
@@ -68,7 +70,7 @@ makes it scriptable.
 
 | Flag | Commands | Default | Notes |
 |---|---|---|---|
-| `--adapter` | `plan`, `create` | prompts | `anthropic` or `ollama` |
+| `--adapter` | `plan`, `create` | prompts | `anthropic`, `ollama`, or `openai`. `openai` is the generic OpenAI-compatible client — point `GENESIS_OPENAI_BASE_URL` at OpenRouter, Groq, Together, vLLM or LM Studio and it works unchanged. **Not yet verified against `api.openai.com` itself** |
 | `--model` | `plan`, `create` | prompts | Menu of known models, or type any name — the list is a menu, not a whitelist (D-047) |
 | `--output` | `plan`, `create` | — | Save the plan JSON to a path |
 | `--force` | `scaffold`, `create` | off | Overwrite an existing output directory |
@@ -91,6 +93,7 @@ Where should we scaffold it?
 Choose adapter:
 1) Anthropic
 2) Ollama
+3) OpenAI
 → 1
 
 Choose anthropic model:
